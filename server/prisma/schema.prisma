@@ -1,0 +1,339 @@
+// Enterprise CRM Pro - Prisma Schema
+// Phase 1: Foundation & Core
+// Multi-tenancy strategy: tenant_id scoping on every row (RLS-ready)
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// Multi-tenancy
+// ─────────────────────────────────────────────
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  domain    String?  @unique
+  plan      String   @default("free")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users         User[]
+  contacts      Contact[]
+  companies     Company[]
+  deals         Deal[]
+  dealStages    DealStage[]
+  activities    Activity[]
+  tasks         Task[]
+  auditLogs       AuditLog[]
+  conversations   Conversation[]
+  messages        Message[]
+  cannedResponses CannedResponse[]
+
+  @@map("tenants")
+}
+
+// ─────────────────────────────────────────────
+// Users, Roles & RBAC
+// ─────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  TENANT_ADMIN
+  MANAGER
+  SALES_REP
+  SUPPORT_AGENT
+  VIEWER
+}
+
+model User {
+  id           String    @id @default(uuid())
+  tenantId     String
+  email        String
+  passwordHash String
+  firstName    String
+  lastName     String
+  role         Role      @default(SALES_REP)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  refreshToken String? // hashed refresh token
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant           Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ownedContacts    Contact[]  @relation("ContactOwner")
+  ownedCompanies   Company[]  @relation("CompanyOwner")
+  ownedDeals            Deal[]         @relation("DealOwner")
+  activities            Activity[]
+  assignedTasks         Task[]         @relation("TaskAssignee")
+  createdTasks          Task[]         @relation("TaskCreator")
+  auditLogs             AuditLog[]
+  assignedConversations Conversation[] @relation("ConversationAssignee")
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────
+// Core CRM
+// ─────────────────────────────────────────────
+
+model Company {
+  id         String   @id @default(uuid())
+  tenantId   String
+  name       String
+  domain     String?
+  industry   String?
+  website    String?
+  phone      String?
+  employees  Int?
+  annualRev  Decimal? @db.Decimal(18, 2)
+  ownerId    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owner    User?     @relation("CompanyOwner", fields: [ownerId], references: [id])
+  contacts Contact[]
+  deals    Deal[]
+
+  @@index([tenantId])
+  @@map("companies")
+}
+
+model Contact {
+  id         String   @id @default(uuid())
+  tenantId   String
+  firstName  String
+  lastName   String
+  email      String?
+  phone      String?
+  jobTitle   String?
+  companyId  String?
+  ownerId    String?
+  score      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company       Company?       @relation(fields: [companyId], references: [id])
+  owner         User?          @relation("ContactOwner", fields: [ownerId], references: [id])
+  deals         Deal[]
+  activities    Activity[]
+  conversations Conversation[]
+
+  @@index([tenantId])
+  @@index([tenantId, email])
+  @@index([tenantId, phone])
+  @@map("contacts")
+}
+
+model DealStage {
+  id          String @id @default(uuid())
+  tenantId    String
+  name        String
+  order       Int
+  probability Int    @default(0) // 0-100
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deals  Deal[]
+
+  @@index([tenantId])
+  @@map("deal_stages")
+}
+
+model Deal {
+  id          String    @id @default(uuid())
+  tenantId    String
+  title       String
+  value       Decimal   @default(0) @db.Decimal(18, 2)
+  currency    String    @default("INR")
+  stageId     String
+  companyId   String?
+  contactId   String?
+  ownerId     String?
+  status      String    @default("open") // open | won | lost
+  expectedAt  DateTime?
+  closedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stage      DealStage  @relation(fields: [stageId], references: [id])
+  company    Company?   @relation(fields: [companyId], references: [id])
+  contact    Contact?   @relation(fields: [contactId], references: [id])
+  owner      User?      @relation("DealOwner", fields: [ownerId], references: [id])
+  activities Activity[]
+
+  @@index([tenantId])
+  @@index([tenantId, stageId])
+  @@map("deals")
+}
+
+enum ActivityType {
+  CALL
+  EMAIL
+  MEETING
+  NOTE
+  TASK
+  WHATSAPP
+}
+
+model Activity {
+  id        String       @id @default(uuid())
+  tenantId  String
+  type      ActivityType
+  subject   String
+  body      String?
+  userId    String
+  contactId String?
+  dealId    String?
+  createdAt DateTime     @default(now())
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id])
+  contact Contact? @relation(fields: [contactId], references: [id])
+  deal    Deal?    @relation(fields: [dealId], references: [id])
+
+  @@index([tenantId])
+  @@map("activities")
+}
+
+model Task {
+  id          String    @id @default(uuid())
+  tenantId    String
+  title       String
+  description String?
+  dueAt       DateTime?
+  priority    String    @default("medium") // low | medium | high
+  status      String    @default("open") // open | in_progress | done
+  assigneeId  String?
+  creatorId   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignee User?  @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  creator  User   @relation("TaskCreator", fields: [creatorId], references: [id])
+
+  @@index([tenantId])
+  @@map("tasks")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  tenantId   String
+  userId     String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────
+// Communication Hub (Phase 2) — omnichannel foundation
+// ─────────────────────────────────────────────
+
+enum Channel {
+  WHATSAPP
+  EMAIL
+  SMS
+  LIVE_CHAT
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  RECEIVED
+}
+
+model Conversation {
+  id            String   @id @default(uuid())
+  tenantId      String
+  channel       Channel  @default(WHATSAPP)
+  // External participant identifier (e.g. WhatsApp phone in E.164)
+  externalId    String
+  contactId     String?
+  assignedToId  String?
+  status        String   @default("open") // open | pending | closed
+  lastMessageAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  firstResponseAt DateTime?
+
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact    Contact?  @relation(fields: [contactId], references: [id])
+  assignedTo User?     @relation("ConversationAssignee", fields: [assignedToId], references: [id])
+  messages   Message[]
+
+  @@unique([tenantId, channel, externalId])
+  @@index([tenantId, channel])
+  @@index([tenantId, lastMessageAt])
+  @@index([tenantId, assignedToId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String           @id @default(uuid())
+  tenantId       String
+  conversationId String
+  channel        Channel          @default(WHATSAPP)
+  direction      MessageDirection
+  type           String           @default("text") // text | template | image | document | note
+  body           String?
+  // Internal notes are visible to agents only, never sent to the customer
+  isInternal     Boolean          @default(false)
+  authorId       String?
+  // Provider-side message id (e.g. WhatsApp wamid) for status callbacks
+  externalId     String?
+  status         MessageStatus    @default(QUEUED)
+  metadata       Json?
+  createdAt      DateTime         @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, conversationId])
+  @@index([externalId])
+  @@map("messages")
+}
+
+model CannedResponse {
+  id        String   @id @default(uuid())
+  tenantId  String
+  title     String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("canned_responses")
+}

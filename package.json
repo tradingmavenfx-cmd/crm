@@ -1,0 +1,21 @@
+{
+  "name": "enterprise-crm-pro",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Enterprise CRM Pro - Salesforce/HubSpot/Zoho competitor with native WhatsApp, IVR, AI agents",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev:server": "npm --workspace server run start:dev",
+    "dev:client": "npm --workspace client run dev",
+    "build:server": "npm --workspace server run build",
+    "build:client": "npm --workspace client run build",
+    "test:server": "npm --workspace server run test",
+    "lint": "npm --workspace server run lint"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
