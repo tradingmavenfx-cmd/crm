@@ -1,0 +1,29 @@
+import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { EmailService } from './email.service';
+import { EmailController } from './email.controller';
+import { EMAIL_PROVIDER } from './providers/email-provider.interface';
+import { MockEmailProvider } from './providers/mock-email.provider';
+import { SmtpEmailProvider } from './providers/smtp-email.provider';
+
+@Module({
+  controllers: [EmailController],
+  providers: [
+    EmailService,
+    MockEmailProvider,
+    SmtpEmailProvider,
+    {
+      // Use the real SMTP provider only when an SMTP host is configured;
+      // otherwise fall back to the mock so dev/tests work without a mail server.
+      provide: EMAIL_PROVIDER,
+      inject: [ConfigService, SmtpEmailProvider, MockEmailProvider],
+      useFactory: (
+        config: ConfigService,
+        smtp: SmtpEmailProvider,
+        mock: MockEmailProvider,
+      ) => (config.get<boolean>('email.enabled') ? smtp : mock),
+    },
+  ],
+  exports: [EmailService],
+})
+export class EmailModule {}

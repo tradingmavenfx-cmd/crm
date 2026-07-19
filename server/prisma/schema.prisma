@@ -37,6 +37,7 @@ model Tenant {
   conversations   Conversation[]
   messages        Message[]
   cannedResponses CannedResponse[]
+  emailTemplates  EmailTemplate[]
 
   @@map("tenants")
 }
@@ -306,6 +307,7 @@ model Message {
   channel        Channel          @default(WHATSAPP)
   direction      MessageDirection
   type           String           @default("text") // text | template | image | document | note
+  subject        String? // used by email channel
   body           String?
   // Internal notes are visible to agents only, never sent to the customer
   isInternal     Boolean          @default(false)
@@ -336,4 +338,19 @@ model CannedResponse {
 
   @@index([tenantId])
   @@map("canned_responses")
+}
+
+model EmailTemplate {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  subject   String
+  body      String // HTML or plain text with {{merge}} fields
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("email_templates")
 }

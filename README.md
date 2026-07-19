@@ -45,7 +45,9 @@ Currently building **Phase 1 — Foundation & Core**.
 - [x] Team inbox UI (conversation list + live thread + send box + new-chat)
 - [x] Team inbox features: agent assignment/transfer, status, internal notes, canned responses, SLA first-response tracking
 - [x] Users list endpoint (for assignment); idempotent seed (no data loss on restart)
-- [ ] IVR / cloud telephony, email, SMS, unified inbox
+- [x] Email channel: send (SMTP + dev mock), inbound webhook, templates CRUD, contact linking
+- [x] Email templates management UI
+- [ ] Unified inbox (merge WhatsApp + Email), IVR / telephony, SMS
 
 WhatsApp works out-of-the-box with a **mock provider** (messages logged) when no
 credentials are set. To use the real Meta Cloud API, set `WHATSAPP_ACCESS_TOKEN`

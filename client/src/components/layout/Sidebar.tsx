@@ -10,6 +10,7 @@ const nav = [
   { href: '/companies', label: 'Companies' },
   { href: '/deals', label: 'Deals' },
   { href: '/tasks', label: 'Tasks' },
+  { href: '/email-templates', label: 'Email Templates' },
 ];
 
 export function Sidebar() {
