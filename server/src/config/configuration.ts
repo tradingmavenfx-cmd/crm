@@ -27,6 +27,30 @@ export interface AppConfig {
     password: string;
     from: string;
   };
+  sms: {
+    // When false (no credentials), the mock provider is used and texts are logged.
+    enabled: boolean;
+    accountSid: string;
+    authToken: string;
+    from: string;
+    // Messaging service / DLT entity id required by Indian (TRAI) senders
+    dltEntityId: string;
+  };
+  voice: {
+    // When false (no credentials), the mock provider is used and calls are logged.
+    enabled: boolean;
+    accountSid: string;
+    authToken: string;
+    from: string;
+    // Public base URL the telephony platform posts IVR callbacks to
+    publicUrl: string;
+    statusCallbackUrl: string;
+    // Contact score at or above which a caller skips the menu (VIP routing)
+    vipScoreThreshold: number;
+    voicemailMaxSec: number;
+    // Auto-reply text sent after a missed inbound call ('' disables it)
+    missedCallSms: string;
+  };
 }
 
 export default (): AppConfig => ({
@@ -57,5 +81,35 @@ export default (): AppConfig => ({
     user: process.env.SMTP_USER ?? '',
     password: process.env.SMTP_PASSWORD ?? '',
     from: process.env.SMTP_FROM ?? 'CRM Pro <no-reply@crm.local>',
+  },
+  sms: {
+    enabled: Boolean(
+      process.env.TWILIO_ACCOUNT_SID &&
+      process.env.TWILIO_AUTH_TOKEN &&
+      process.env.SMS_FROM_NUMBER,
+    ),
+    accountSid: process.env.TWILIO_ACCOUNT_SID ?? '',
+    authToken: process.env.TWILIO_AUTH_TOKEN ?? '',
+    from: process.env.SMS_FROM_NUMBER ?? '',
+    dltEntityId: process.env.SMS_DLT_ENTITY_ID ?? '',
+  },
+  voice: {
+    enabled: Boolean(
+      process.env.TWILIO_ACCOUNT_SID &&
+      process.env.TWILIO_AUTH_TOKEN &&
+      process.env.VOICE_FROM_NUMBER,
+    ),
+    accountSid: process.env.TWILIO_ACCOUNT_SID ?? '',
+    authToken: process.env.TWILIO_AUTH_TOKEN ?? '',
+    from: process.env.VOICE_FROM_NUMBER ?? '',
+    publicUrl:
+      process.env.VOICE_PUBLIC_URL ??
+      `http://localhost:${process.env.PORT ?? '4000'}/api`,
+    statusCallbackUrl: process.env.VOICE_STATUS_CALLBACK_URL ?? '',
+    vipScoreThreshold: parseInt(process.env.VOICE_VIP_SCORE ?? '70', 10),
+    voicemailMaxSec: parseInt(process.env.VOICE_VOICEMAIL_MAX_SEC ?? '120', 10),
+    missedCallSms:
+      process.env.VOICE_MISSED_CALL_SMS ??
+      'Sorry we missed your call. Our team will call you back shortly.',
   },
 });

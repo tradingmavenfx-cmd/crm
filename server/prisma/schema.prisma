@@ -26,18 +26,23 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users         User[]
-  contacts      Contact[]
-  companies     Company[]
-  deals         Deal[]
-  dealStages    DealStage[]
-  activities    Activity[]
-  tasks         Task[]
+  users           User[]
+  contacts        Contact[]
+  companies       Company[]
+  deals           Deal[]
+  dealStages      DealStage[]
+  activities      Activity[]
+  tasks           Task[]
   auditLogs       AuditLog[]
   conversations   Conversation[]
   messages        Message[]
   cannedResponses CannedResponse[]
   emailTemplates  EmailTemplate[]
+  smsTemplates    SmsTemplate[]
+  smsOptOuts      SmsOptOut[]
+  smsOtps         SmsOtp[]
+  ivrFlows        IvrFlow[]
+  calls           Call[]
 
   @@map("tenants")
 }
@@ -62,6 +67,8 @@ model User {
   passwordHash String
   firstName    String
   lastName     String
+  /// Direct/extension number used for IVR transfers and click-to-call
+  phone        String?
   role         Role      @default(SALES_REP)
   isActive     Boolean   @default(true)
   lastLoginAt  DateTime?
@@ -69,15 +76,16 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  tenant           Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  ownedContacts    Contact[]  @relation("ContactOwner")
-  ownedCompanies   Company[]  @relation("CompanyOwner")
+  tenant                Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ownedContacts         Contact[]      @relation("ContactOwner")
+  ownedCompanies        Company[]      @relation("CompanyOwner")
   ownedDeals            Deal[]         @relation("DealOwner")
   activities            Activity[]
   assignedTasks         Task[]         @relation("TaskAssignee")
   createdTasks          Task[]         @relation("TaskCreator")
   auditLogs             AuditLog[]
   assignedConversations Conversation[] @relation("ConversationAssignee")
+  handledCalls          Call[]         @relation("CallAgent")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -89,18 +97,18 @@ model User {
 // ─────────────────────────────────────────────
 
 model Company {
-  id         String   @id @default(uuid())
-  tenantId   String
-  name       String
-  domain     String?
-  industry   String?
-  website    String?
-  phone      String?
-  employees  Int?
-  annualRev  Decimal? @db.Decimal(18, 2)
-  ownerId    String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  domain    String?
+  industry  String?
+  website   String?
+  phone     String?
+  employees Int?
+  annualRev Decimal? @db.Decimal(18, 2)
+  ownerId   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   owner    User?     @relation("CompanyOwner", fields: [ownerId], references: [id])
@@ -112,18 +120,18 @@ model Company {
 }
 
 model Contact {
-  id         String   @id @default(uuid())
-  tenantId   String
-  firstName  String
-  lastName   String
-  email      String?
-  phone      String?
-  jobTitle   String?
-  companyId  String?
-  ownerId    String?
-  score      Int      @default(0)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(uuid())
+  tenantId  String
+  firstName String
+  lastName  String
+  email     String?
+  phone     String?
+  jobTitle  String?
+  companyId String?
+  ownerId   String?
+  score     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   company       Company?       @relation(fields: [companyId], references: [id])
@@ -131,6 +139,7 @@ model Contact {
   deals         Deal[]
   activities    Activity[]
   conversations Conversation[]
+  calls         Call[]
 
   @@index([tenantId])
   @@index([tenantId, email])
@@ -153,20 +162,20 @@ model DealStage {
 }
 
 model Deal {
-  id          String    @id @default(uuid())
-  tenantId    String
-  title       String
-  value       Decimal   @default(0) @db.Decimal(18, 2)
-  currency    String    @default("INR")
-  stageId     String
-  companyId   String?
-  contactId   String?
-  ownerId     String?
-  status      String    @default("open") // open | won | lost
-  expectedAt  DateTime?
-  closedAt    DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id         String    @id @default(uuid())
+  tenantId   String
+  title      String
+  value      Decimal   @default(0) @db.Decimal(18, 2)
+  currency   String    @default("INR")
+  stageId    String
+  companyId  String?
+  contactId  String?
+  ownerId    String?
+  status     String    @default("open") // open | won | lost
+  expectedAt DateTime?
+  closedAt   DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   stage      DealStage  @relation(fields: [stageId], references: [id])
@@ -257,6 +266,7 @@ enum Channel {
   EMAIL
   SMS
   LIVE_CHAT
+  VOICE
 }
 
 enum MessageDirection {
@@ -292,6 +302,7 @@ model Conversation {
   contact    Contact?  @relation(fields: [contactId], references: [id])
   assignedTo User?     @relation("ConversationAssignee", fields: [assignedToId], references: [id])
   messages   Message[]
+  calls      Call[]
 
   @@unique([tenantId, channel, externalId])
   @@index([tenantId, channel])
@@ -353,4 +364,142 @@ model EmailTemplate {
 
   @@index([tenantId])
   @@map("email_templates")
+}
+
+// ─────────────────────────────────────────────
+// IVR & Cloud Telephony (Phase 2.2)
+// ─────────────────────────────────────────────
+
+enum CallDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum CallStatus {
+  QUEUED
+  RINGING
+  IN_PROGRESS
+  COMPLETED
+  MISSED
+  BUSY
+  FAILED
+  VOICEMAIL
+}
+
+/// A multi-level IVR menu. Levels are composed by pointing a `menu` option at
+/// another flow, which keeps each level independently editable.
+model IvrFlow {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  /// Prompt played before the menu ("Welcome to Acme. For sales, press 1…")
+  greeting    String
+  /// Only one flow per tenant answers inbound calls.
+  isActive    Boolean  @default(false)
+  /// Menu options: [{ digit, label, action, value }] where action is one of
+  /// menu | transfer | voicemail | message | crm_lookup | hangup
+  options     Json     @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  calls  Call[]
+
+  @@index([tenantId])
+  @@index([tenantId, isActive])
+  @@map("ivr_flows")
+}
+
+model Call {
+  id           String        @id @default(uuid())
+  tenantId     String
+  direction    CallDirection
+  /// Caller number (E.164) — the customer on inbound, the virtual number on outbound
+  from         String
+  to           String
+  status       CallStatus    @default(QUEUED)
+  /// Provider-side call id (e.g. Twilio CallSid) for status callbacks
+  externalId   String?
+  durationSec  Int           @default(0)
+  recordingUrl String?
+  /// Voicemail / recording transcription
+  transcript   String?
+  /// DTMF digits pressed, in order, across the IVR tree
+  ivrPath      String[]      @default([])
+
+  contactId      String?
+  agentId        String?
+  ivrFlowId      String?
+  conversationId String?
+
+  startedAt  DateTime  @default(now())
+  answeredAt DateTime?
+  endedAt    DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact      Contact?      @relation(fields: [contactId], references: [id])
+  agent        User?         @relation("CallAgent", fields: [agentId], references: [id])
+  ivrFlow      IvrFlow?      @relation(fields: [ivrFlowId], references: [id])
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, startedAt])
+  @@index([tenantId, agentId])
+  @@index([tenantId, status])
+  @@index([externalId])
+  @@map("calls")
+}
+
+// ─────────────────────────────────────────────
+// SMS (Phase 2.4)
+// ─────────────────────────────────────────────
+
+model SmsTemplate {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  /// Plain text with {{merge}} fields
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("sms_templates")
+}
+
+/// TRAI/DND compliance — numbers that must never receive an SMS from this tenant.
+model SmsOptOut {
+  id        String   @id @default(uuid())
+  tenantId  String
+  phone     String
+  /// stop_keyword | manual | dnd_registry
+  reason    String   @default("stop_keyword")
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, phone])
+  @@index([tenantId])
+  @@map("sms_opt_outs")
+}
+
+model SmsOtp {
+  id         String    @id @default(uuid())
+  tenantId   String
+  phone      String
+  /// bcrypt hash — the plaintext code is only ever sent over SMS
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, phone])
+  @@map("sms_otps")
 }

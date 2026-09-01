@@ -5,12 +5,15 @@ import { usePathname } from 'next/navigation';
 
 const nav = [
   { href: '/dashboard', label: 'Dashboard' },
-  { href: '/inbox', label: 'WhatsApp Inbox' },
+  { href: '/inbox', label: 'Inbox' },
   { href: '/contacts', label: 'Contacts' },
   { href: '/companies', label: 'Companies' },
   { href: '/deals', label: 'Deals' },
   { href: '/tasks', label: 'Tasks' },
+  { href: '/calls', label: 'Calls' },
+  { href: '/ivr-flows', label: 'IVR Flows' },
   { href: '/email-templates', label: 'Email Templates' },
+  { href: '/sms-templates', label: 'SMS Templates' },
 ];
 
 export function Sidebar() {

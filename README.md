@@ -15,7 +15,7 @@ See [`implementation_plan.md`](./implementation_plan.md) for the full 6-phase ro
 
 ## Build Status
 
-Currently building **Phase 1 — Foundation & Core**.
+Phases 1 and 2 are complete; **Phase 3 — Intelligence & Automation** is next.
 
 - [x] Monorepo scaffolding
 - [x] NestJS backend foundation (config, Prisma, global guards, Swagger)
@@ -28,14 +28,14 @@ Currently building **Phase 1 — Foundation & Core**.
 - [x] Tasks (assignee, due date, priority, status filters)
 - [x] Seed script (demo tenant "acme" + users + pipeline + sample data)
 - [x] docker-compose for local PostgreSQL 17 + Redis 7
-- [x] Tests: unit (16) + e2e (3) passing, build green
+- [x] Tests: unit (77) + e2e (3) passing, build green
 - [x] Run migration + seed against a live PostgreSQL (via Docker)
 - [x] Full stack runs in Docker (postgres + redis + server + client) — verified end-to-end
 - [x] Phase 1.1: Next.js 15 frontend (auth pages, dashboard shell, API client)
 - [x] Frontend CRUD screens: Contacts, Companies, Deals (pipeline board), Tasks
 - [x] Polish: debounced search, pagination, edit-in-place, contact↔company linking, inline task status
 
-## Phase 2 — Communication Hub (in progress)
+## Phase 2 — Communication Hub
 
 - [x] WhatsApp Business API backend (provider abstraction: Meta Cloud API + dev mock)
 - [x] Conversations + Messages models (omnichannel-ready — WhatsApp/email/SMS/chat)
@@ -47,11 +47,86 @@ Currently building **Phase 1 — Foundation & Core**.
 - [x] Users list endpoint (for assignment); idempotent seed (no data loss on restart)
 - [x] Email channel: send (SMTP + dev mock), inbound webhook, templates CRUD, contact linking
 - [x] Email templates management UI
-- [ ] Unified inbox (merge WhatsApp + Email), IVR / telephony, SMS
+- [x] Unified inbox — all channels in one view, channel filter, cross-channel reply routing, assignment/status/notes
+- [x] SMS channel: two-way conversations, templates + merge fields, bulk/campaign
+      send, TRAI DND opt-out (STOP/START), OTP send & verify
+- [x] IVR & cloud telephony: multi-level IVR menus, DTMF routing, dynamic IVR
+      reading live CRM data, VIP priority routing, voicemail, click-to-call,
+      call log + analytics, missed-call automation
+- [x] Calls and voicemails threaded into the unified inbox
+- [x] IVR builder UI, call log + analytics UI, SMS templates + DND list UI
 
-WhatsApp works out-of-the-box with a **mock provider** (messages logged) when no
-credentials are set. To use the real Meta Cloud API, set `WHATSAPP_ACCESS_TOKEN`
-and `WHATSAPP_PHONE_NUMBER_ID` in `server/.env`.
+**Phase 2 is feature-complete** apart from the pieces that depend on Phase 3's AI
+layer and on WebRTC — see "Not built yet" below.
+
+### Channels work without credentials
+
+Every channel ships with a **mock provider** (the message or call is logged, and
+the rest of the flow runs normally), so the whole hub is usable in dev with no
+accounts. Set the real credentials in `server/.env` to switch each one over:
+
+| Channel | Real provider | Enable by setting |
+|---|---|---|
+| WhatsApp | Meta Cloud API | `WHATSAPP_ACCESS_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID` |
+| Email | SMTP (nodemailer) | `SMTP_HOST` |
+| SMS | Twilio Programmable Messaging | `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN` + `SMS_FROM_NUMBER` |
+| Voice / IVR | Twilio Programmable Voice | `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN` + `VOICE_FROM_NUMBER` |
+
+With the mock voice provider, IVR steps come back as plain JSON so the whole call
+flow can be driven from `curl`; the Twilio provider renders the same steps as
+TwiML. See `server/.env.example` for every variable.
+
+### IVR & telephony
+
+The active IVR flow answers all inbound calls. A menu key can transfer to an
+agent, drop into a submenu (that's how multi-level menus are built), take a
+voicemail, read out a fixed message, hang up, or **read live CRM data back to the
+caller** — "press 3 for your order status" looks up the caller's most recent deal
+and speaks its stage and value. A contact scoring at or above `VOICE_VIP_SCORE`
+skips the menu entirely and rings their account manager.
+
+A missed inbound call automatically creates the caller as a lead if they are
+unknown, files a high-priority callback task on an agent, logs an activity, and
+texts the caller back.
+
+Telephony webhooks (public, tenant in the path):
+
+```
+POST /api/voice/webhook/:tenantId/incoming    # answer -> greeting + menu
+POST /api/voice/webhook/:tenantId/dtmf        # keypress -> next step
+POST /api/voice/webhook/:tenantId/status      # end of call -> log + automation
+POST /api/voice/webhook/:tenantId/recording   # voicemail recording
+```
+
+They accept Twilio's form fields (`CallSid`, `From`, `Digits`, `CallStatus`, …)
+or the equivalent JSON, so the flow can be exercised locally:
+
+```bash
+curl -X POST http://localhost:4000/api/voice/webhook/$TENANT_ID/incoming \
+  -H 'Content-Type: application/json' \
+  -d '{"From":"+919876543210","CallSid":"CA-demo-1"}'
+```
+
+Against a real Twilio number, point the voice webhook at
+`$VOICE_PUBLIC_URL/voice/webhook/<tenantId>/incoming` — in dev that needs a
+tunnel, since Twilio must reach the callback URL.
+
+### SMS
+
+Two-way SMS threads land in the same inbox. Templates support `{{merge}}` fields,
+bulk sends skip opted-out numbers instead of failing the batch, and an inbound
+`STOP` adds the number to the DND list automatically (`START` removes it).
+`POST /api/sms/otp/send` and `/verify` cover OTP verification — only a bcrypt hash
+of the code is stored, codes expire in 5 minutes, and there is a 5-attempt limit.
+
+### Not built yet (deferred to Phase 3+)
+
+The Phase 2 plan also lists work that depends on the Phase 3 AI layer or on
+WebRTC, none of which is implemented: AI voice agent and post-call summaries,
+call sentiment/keyword analysis, speech-to-text transcription (the field is
+stored but never populated automatically), predictive/auto dialer, browser
+softphone, live chat widget, video calling, and social DMs. Call recording is
+stored as a provider URL only — the CRM does not host audio.
 
 ### Verify locally
 
@@ -62,7 +137,13 @@ npx prisma generate
 npm run build        # tsc/nest build
 npm test             # unit tests (mocked Prisma)
 npm run test:e2e     # boots full app, no DB needed
+npm run lint         # eslint + prettier (--fix)
 ```
+
+From the repo root, `npm run lint` covers both workspaces. Server lint is
+typescript-eslint + prettier (`server/.eslintrc.js`); the client uses
+`next/core-web-vitals` (`client/.eslintrc.json`). Prettier settings are shared
+from `.prettierrc` at the root.
 
 ### Run against a real database
 
@@ -87,8 +168,11 @@ npm run build                 # production build + typecheck + lint
 npm run dev                   # http://localhost:3000
 ```
 
-Routes: `/` landing, `/login`, `/register`, `/dashboard` (auth-guarded shell
-with sidebar, topbar, and live contact/company/task counts from the API).
+Routes: `/` landing, `/login`, `/register`, and the auth-guarded shell with
+`/dashboard`, `/inbox` (unified, all channels), `/contacts`, `/companies`,
+`/deals`, `/tasks`, `/calls` (call log, analytics, click-to-call),
+`/ivr-flows` (IVR menu builder), `/email-templates`, `/sms-templates` (templates
+plus the DND list).
 
 ## Run the whole stack with Docker (recommended)
 

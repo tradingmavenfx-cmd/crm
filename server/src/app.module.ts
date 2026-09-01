@@ -12,6 +12,9 @@ import { ActivitiesModule } from './modules/activities/activities.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { EmailModule } from './modules/email/email.module';
+import { SmsModule } from './modules/sms/sms.module';
+import { VoiceModule } from './modules/voice/voice.module';
+import { InboxModule } from './modules/inbox/inbox.module';
 import { HealthController } from './modules/health/health.controller';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -32,6 +35,9 @@ import { RolesGuard } from './common/guards/roles.guard';
     TasksModule,
     WhatsappModule,
     EmailModule,
+    SmsModule,
+    VoiceModule,
+    InboxModule,
   ],
   controllers: [HealthController],
   providers: [

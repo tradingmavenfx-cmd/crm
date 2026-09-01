@@ -73,11 +73,15 @@ export interface Conversation {
 export interface Message {
   id: string;
   conversationId: string;
+  channel: string;
   direction: 'INBOUND' | 'OUTBOUND';
   type: string;
+  subject: string | null;
   body: string | null;
   status: string;
   isInternal: boolean;
+  /** Channel-specific detail - call duration, recording URL, IVR keys pressed */
+  metadata?: Record<string, unknown> | null;
   createdAt: string;
 }
 
@@ -100,4 +104,76 @@ export interface EmailTemplate {
   name: string;
   subject: string;
   body: string;
+}
+
+export interface SmsTemplate {
+  id: string;
+  name: string;
+  body: string;
+}
+
+export interface SmsOptOut {
+  id: string;
+  phone: string;
+  reason: string;
+  createdAt: string;
+}
+
+export type IvrActionType =
+  | 'menu'
+  | 'transfer'
+  | 'voicemail'
+  | 'message'
+  | 'crm_lookup'
+  | 'hangup';
+
+export interface IvrOption {
+  digit: string;
+  label: string;
+  action: IvrActionType;
+  value?: string;
+}
+
+export interface IvrFlow {
+  id: string;
+  name: string;
+  description: string | null;
+  greeting: string;
+  isActive: boolean;
+  options: IvrOption[];
+  updatedAt: string;
+}
+
+export interface Call {
+  id: string;
+  direction: 'INBOUND' | 'OUTBOUND';
+  from: string;
+  to: string;
+  status: string;
+  durationSec: number;
+  recordingUrl: string | null;
+  transcript: string | null;
+  ivrPath: string[];
+  startedAt: string;
+  contact?: ConversationContact | null;
+  agent?: { id: string; firstName: string; lastName: string } | null;
+  ivrFlow?: { id: string; name: string } | null;
+}
+
+export interface CallAnalytics {
+  total: number;
+  answered: number;
+  missed: number;
+  voicemails: number;
+  answerRate: number;
+  totalTalkTimeSec: number;
+  avgDurationSec: number;
+  byStatus: Record<string, number>;
+  byDirection: Record<string, number>;
+  byAgent: {
+    agentId: string | null;
+    name: string;
+    calls: number;
+    talkTimeSec: number;
+  }[];
 }

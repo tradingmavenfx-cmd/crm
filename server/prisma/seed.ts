@@ -10,8 +10,11 @@ async function main(): Promise<void> {
   // (avoids wiping conversations/contacts on every container restart).
   const existing = await prisma.tenant.findUnique({ where: { slug } });
   if (existing) {
+    // Core data is left untouched, but newer modules top themselves up so an
+    // existing database still gets the IVR/SMS demo content.
+    await seedTelephonyAndSms(existing.id);
     // eslint-disable-next-line no-console
-    console.log('✅ Demo tenant already seeded — skipping.');
+    console.log('✅ Demo tenant already seeded — telephony/SMS demo data checked.');
     return;
   }
 
@@ -119,12 +122,118 @@ async function main(): Promise<void> {
     },
   });
 
+  await seedTelephonyAndSms(tenant.id);
+
   // eslint-disable-next-line no-console
   console.log('✅ Seed complete.');
   // eslint-disable-next-line no-console
   console.log('   Tenant slug: acme');
   // eslint-disable-next-line no-console
   console.log('   Login: admin@acme.com / rep@acme.com  (password: Password123!)');
+}
+
+/**
+ * IVR flows, agent numbers and SMS templates (Phase 2.2 / 2.4). Runs on both a
+ * fresh and an already-seeded tenant, and does nothing if the data is present.
+ */
+async function seedTelephonyAndSms(tenantId: string): Promise<void> {
+  // Agents need a reachable number for IVR transfers and click-to-call.
+  const numbers: Record<string, string> = {
+    'admin@acme.com': '+911140002001',
+    'rep@acme.com': '+911140002002',
+  };
+  for (const [email, phone] of Object.entries(numbers)) {
+    await prisma.user.updateMany({
+      where: { tenantId, email, phone: null },
+      data: { phone },
+    });
+  }
+
+  const rep = await prisma.user.findFirst({
+    where: { tenantId, email: 'rep@acme.com' },
+  });
+
+  const flowCount = await prisma.ivrFlow.count({ where: { tenantId } });
+  if (flowCount === 0) {
+    // Second level first, so the main menu can point at it.
+    const support = await prisma.ivrFlow.create({
+      data: {
+        tenantId,
+        name: 'Support Menu',
+        description: 'Second-level menu reached from the main menu.',
+        greeting: 'You have reached support.',
+        options: [
+          { digit: '1', label: 'voicemail', action: 'voicemail' },
+          {
+            digit: '2',
+            label: 'support hours',
+            action: 'message',
+            value: 'Our support team is available Monday to Saturday, 9 AM to 7 PM India time.',
+          },
+        ],
+      },
+    });
+
+    const main = await prisma.ivrFlow.create({
+      data: {
+        tenantId,
+        name: 'Main Menu',
+        description: 'Answers all inbound calls.',
+        greeting: 'Welcome to Acme Corp.',
+        isActive: true,
+        options: [
+          {
+            digit: '1',
+            label: 'sales',
+            action: 'transfer',
+            value: rep?.id ?? '',
+          },
+          { digit: '2', label: 'support', action: 'menu', value: support.id },
+          {
+            digit: '3',
+            label: 'order status',
+            action: 'crm_lookup',
+            value: 'deal',
+          },
+          { digit: '9', label: 'voicemail', action: 'voicemail' },
+        ],
+      },
+    });
+
+    // Let callers step back up from the support menu.
+    await prisma.ivrFlow.update({
+      where: { id: support.id },
+      data: {
+        options: [
+          ...(support.options as unknown as Record<string, string>[]),
+          { digit: '0', label: 'main menu', action: 'menu', value: main.id },
+        ],
+      },
+    });
+  }
+
+  const templateCount = await prisma.smsTemplate.count({ where: { tenantId } });
+  if (templateCount === 0) {
+    await prisma.smsTemplate.createMany({
+      data: [
+        {
+          tenantId,
+          name: 'Callback promise',
+          body: 'Hi {{name}}, sorry we missed your call. {{agent}} will call you back within {{minutes}} minutes.',
+        },
+        {
+          tenantId,
+          name: 'Payment reminder',
+          body: 'Hi {{name}}, invoice {{invoice}} of Rs {{amount}} is due on {{date}}. Pay via {{link}}. Reply STOP to opt out.',
+        },
+        {
+          tenantId,
+          name: 'Demo confirmation',
+          body: 'Your demo with Acme Corp is confirmed for {{date}} at {{time}}. Reply STOP to opt out.',
+        },
+      ],
+    });
+  }
 }
 
 main()
