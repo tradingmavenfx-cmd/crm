@@ -1,13 +1,5 @@
-import {
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import {
-  Channel,
-  MessageDirection,
-  MessageStatus,
-} from '@prisma/client';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Channel, MessageDirection, MessageStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SendEmailDto } from './dto/send-email.dto';
 import {
@@ -59,7 +51,7 @@ export class EmailService {
   async send(tenantId: string, dto: SendEmailDto) {
     let subject = dto.subject ?? '';
     let html = dto.html;
-    let text = dto.text;
+    const text = dto.text;
 
     if (dto.templateId) {
       const tpl = await this.prisma.emailTemplate.findFirst({

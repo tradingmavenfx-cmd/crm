@@ -92,9 +92,9 @@ describe('ContactsService', () => {
   it('prevents cross-tenant deletion via existence check', async () => {
     prisma.contact.findFirst.mockResolvedValue(null);
 
-    await expect(service.remove(tenantId, 'other-tenant-contact')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      service.remove(tenantId, 'other-tenant-contact'),
+    ).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.contact.delete).not.toHaveBeenCalled();
   });
 });

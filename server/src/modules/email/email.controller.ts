@@ -34,10 +34,7 @@ export class EmailController {
    */
   @Public()
   @Post('webhook/:tenantId')
-  webhook(
-    @Param('tenantId') tenantId: string,
-    @Body() dto: InboundEmailDto,
-  ) {
+  webhook(@Param('tenantId') tenantId: string, @Body() dto: InboundEmailDto) {
     return this.email.receive(tenantId, dto);
   }
 

@@ -56,10 +56,7 @@ export class WhatsappController {
 
   @Post('send')
   @Roles(Role.TENANT_ADMIN, Role.MANAGER, Role.SALES_REP, Role.SUPPORT_AGENT)
-  send(
-    @CurrentUser('tenantId') tenantId: string,
-    @Body() dto: SendMessageDto,
-  ) {
+  send(@CurrentUser('tenantId') tenantId: string, @Body() dto: SendMessageDto) {
     if (!dto.text && !dto.templateName) {
       throw new BadRequestException('Either text or templateName is required');
     }
@@ -72,10 +69,7 @@ export class WhatsappController {
   }
 
   @Get('conversations/:id/messages')
-  messages(
-    @CurrentUser('tenantId') tenantId: string,
-    @Param('id') id: string,
-  ) {
+  messages(@CurrentUser('tenantId') tenantId: string, @Param('id') id: string) {
     return this.whatsapp.listMessages(tenantId, id);
   }
 

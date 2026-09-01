@@ -48,7 +48,9 @@ export class DealsService {
       data: {
         tenantId,
         title: dto.title,
-        value: dto.value ? new Prisma.Decimal(dto.value) : new Prisma.Decimal(0),
+        value: dto.value
+          ? new Prisma.Decimal(dto.value)
+          : new Prisma.Decimal(0),
         currency: dto.currency ?? 'INR',
         stageId: dto.stageId,
         companyId: dto.companyId,
@@ -87,7 +89,9 @@ export class DealsService {
         ...dto,
         value: dto.value ? new Prisma.Decimal(dto.value) : undefined,
         closedAt:
-          dto.status === 'won' || dto.status === 'lost' ? new Date() : undefined,
+          dto.status === 'won' || dto.status === 'lost'
+            ? new Date()
+            : undefined,
       },
     });
   }

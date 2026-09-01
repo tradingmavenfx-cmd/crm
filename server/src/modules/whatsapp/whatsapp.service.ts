@@ -1,14 +1,5 @@
-import {
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
-import {
-  Channel,
-  MessageDirection,
-  MessageStatus,
-} from '@prisma/client';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Channel, MessageDirection, MessageStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import {
@@ -105,14 +96,22 @@ export class WhatsappService {
       where: { id },
       data: {
         assignedToId:
-          data.assignedToId === '' ? null : data.assignedToId ?? undefined,
+          data.assignedToId === '' ? null : (data.assignedToId ?? undefined),
         status: data.status ?? undefined,
       },
-      include: { contact: true, assignedTo: { select: { id: true, firstName: true, lastName: true } } },
+      include: {
+        contact: true,
+        assignedTo: { select: { id: true, firstName: true, lastName: true } },
+      },
     });
   }
 
-  async addNote(tenantId: string, conversationId: string, authorId: string, body: string) {
+  async addNote(
+    tenantId: string,
+    conversationId: string,
+    authorId: string,
+    body: string,
+  ) {
     const conv = await this.prisma.conversation.findFirst({
       where: { id: conversationId, tenantId },
     });

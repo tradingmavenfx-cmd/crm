@@ -19,7 +19,9 @@ export class CompaniesService {
         website: dto.website,
         phone: dto.phone,
         employees: dto.employees,
-        annualRev: dto.annualRev ? new Prisma.Decimal(dto.annualRev) : undefined,
+        annualRev: dto.annualRev
+          ? new Prisma.Decimal(dto.annualRev)
+          : undefined,
         ownerId: dto.ownerId,
       },
     });

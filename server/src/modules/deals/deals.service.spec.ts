@@ -10,7 +10,11 @@ describe('DealsService', () => {
 
   beforeEach(async () => {
     prisma = {
-      dealStage: { create: jest.fn(), findMany: jest.fn(), findFirst: jest.fn() },
+      dealStage: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+      },
       deal: {
         create: jest.fn(),
         findMany: jest.fn(),

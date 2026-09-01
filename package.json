@@ -13,7 +13,7 @@
     "build:server": "npm --workspace server run build",
     "build:client": "npm --workspace client run build",
     "test:server": "npm --workspace server run test",
-    "lint": "npm --workspace server run lint"
+    "lint": "npm --workspace server run lint && npm --workspace client run lint"
   },
   "engines": {
     "node": ">=20"

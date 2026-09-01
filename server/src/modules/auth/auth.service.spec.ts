@@ -42,7 +42,9 @@ describe('AuthService', () => {
     prisma.tenant.findUnique.mockResolvedValue(null);
     prisma.$transaction.mockImplementation(async (cb: any) =>
       cb({
-        tenant: { create: jest.fn().mockResolvedValue({ id: 't1', slug: 'acme' }) },
+        tenant: {
+          create: jest.fn().mockResolvedValue({ id: 't1', slug: 'acme' }),
+        },
         user: {
           create: jest.fn().mockResolvedValue({
             id: 'u1',
@@ -83,7 +85,11 @@ describe('AuthService', () => {
   });
 
   it('rejects login with a wrong password', async () => {
-    prisma.tenant.findUnique.mockResolvedValue({ id: 't1', isActive: true, slug: 'acme' });
+    prisma.tenant.findUnique.mockResolvedValue({
+      id: 't1',
+      isActive: true,
+      slug: 'acme',
+    });
     prisma.user.findUnique.mockResolvedValue({
       id: 'u1',
       isActive: true,
@@ -91,12 +97,20 @@ describe('AuthService', () => {
     });
 
     await expect(
-      service.login({ email: 'a@b.com', password: 'wrong', tenantSlug: 'acme' }),
+      service.login({
+        email: 'a@b.com',
+        password: 'wrong',
+        tenantSlug: 'acme',
+      }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('logs in successfully with valid credentials', async () => {
-    prisma.tenant.findUnique.mockResolvedValue({ id: 't1', isActive: true, slug: 'acme' });
+    prisma.tenant.findUnique.mockResolvedValue({
+      id: 't1',
+      isActive: true,
+      slug: 'acme',
+    });
     prisma.user.findUnique.mockResolvedValue({
       id: 'u1',
       tenantId: 't1',

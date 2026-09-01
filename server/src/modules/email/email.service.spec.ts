@@ -58,13 +58,20 @@ describe('EmailService', () => {
     });
 
     expect(prisma.conversation.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ externalId: 'lead@example.com', contactId: 'c1' }),
+      data: expect.objectContaining({
+        externalId: 'lead@example.com',
+        contactId: 'c1',
+      }),
     });
     expect(provider.send).toHaveBeenCalledWith(
       expect.objectContaining({ to: 'Lead@Example.com', subject: 'Hello' }),
     );
     expect(prisma.message.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ direction: 'OUTBOUND', channel: 'EMAIL', status: MessageStatus.SENT }),
+      data: expect.objectContaining({
+        direction: 'OUTBOUND',
+        channel: 'EMAIL',
+        status: MessageStatus.SENT,
+      }),
     });
   });
 
@@ -78,17 +85,28 @@ describe('EmailService', () => {
     prisma.message.create.mockResolvedValue({ id: 'm1' });
     prisma.conversation.update.mockResolvedValue({});
 
-    await service.send(tenantId, { to: 'x@y.com', subject: '', templateId: 'tpl1' });
+    await service.send(tenantId, {
+      to: 'x@y.com',
+      subject: '',
+      templateId: 'tpl1',
+    });
 
     expect(provider.send).toHaveBeenCalledWith(
-      expect.objectContaining({ subject: 'Welcome!', html: '<p>Onboarding</p>' }),
+      expect.objectContaining({
+        subject: 'Welcome!',
+        html: '<p>Onboarding</p>',
+      }),
     );
   });
 
   it('throws when the template is missing', async () => {
     prisma.emailTemplate.findFirst.mockResolvedValue(null);
     await expect(
-      service.send(tenantId, { to: 'x@y.com', subject: 's', templateId: 'nope' }),
+      service.send(tenantId, {
+        to: 'x@y.com',
+        subject: 's',
+        templateId: 'nope',
+      }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -104,15 +122,19 @@ describe('EmailService', () => {
     });
 
     expect(prisma.message.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ direction: 'INBOUND', body: 'Thanks!', status: MessageStatus.RECEIVED }),
+      data: expect.objectContaining({
+        direction: 'INBOUND',
+        body: 'Thanks!',
+        status: MessageStatus.RECEIVED,
+      }),
     });
   });
 
   it('scopes template deletion to the tenant', async () => {
     prisma.emailTemplate.findFirst.mockResolvedValue(null);
-    await expect(service.removeTemplate(tenantId, 'other')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      service.removeTemplate(tenantId, 'other'),
+    ).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.emailTemplate.delete).not.toHaveBeenCalled();
   });
 });

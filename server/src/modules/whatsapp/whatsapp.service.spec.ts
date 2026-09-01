@@ -56,11 +56,22 @@ describe('WhatsappService', () => {
     await service.send(tenantId, { to: '+919876543210', text: 'Hello' });
 
     expect(prisma.conversation.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ tenantId, externalId: '+919876543210', contactId: 'c1' }),
+      data: expect.objectContaining({
+        tenantId,
+        externalId: '+919876543210',
+        contactId: 'c1',
+      }),
     });
-    expect(provider.sendText).toHaveBeenCalledWith({ to: '+919876543210', text: 'Hello' });
+    expect(provider.sendText).toHaveBeenCalledWith({
+      to: '+919876543210',
+      text: 'Hello',
+    });
     expect(prisma.message.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ direction: 'OUTBOUND', externalId: 'wamid.1', status: MessageStatus.SENT }),
+      data: expect.objectContaining({
+        direction: 'OUTBOUND',
+        externalId: 'wamid.1',
+        status: MessageStatus.SENT,
+      }),
     });
   });
 
@@ -90,7 +101,10 @@ describe('WhatsappService', () => {
     });
 
     expect(provider.sendTemplate).toHaveBeenCalledWith(
-      expect.objectContaining({ templateName: 'order_update', parameters: ['#123'] }),
+      expect.objectContaining({
+        templateName: 'order_update',
+        parameters: ['#123'],
+      }),
     );
     expect(provider.sendText).not.toHaveBeenCalled();
   });
@@ -109,7 +123,12 @@ describe('WhatsappService', () => {
               value: {
                 metadata: { phone_number_id: 'pn-1' },
                 messages: [
-                  { id: 'wamid.in', from: '+913333333333', type: 'text', text: { body: 'Need help' } },
+                  {
+                    id: 'wamid.in',
+                    from: '+913333333333',
+                    type: 'text',
+                    text: { body: 'Need help' },
+                  },
                 ],
               },
             },
@@ -119,20 +138,33 @@ describe('WhatsappService', () => {
     });
 
     expect(prisma.message.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ direction: 'INBOUND', body: 'Need help', status: MessageStatus.RECEIVED }),
+      data: expect.objectContaining({
+        direction: 'INBOUND',
+        body: 'Need help',
+        status: MessageStatus.RECEIVED,
+      }),
     });
   });
 
   it('assigns a conversation to an agent (tenant-scoped)', async () => {
     prisma.conversation.findFirst.mockResolvedValue({ id: 'conv1', tenantId });
-    prisma.conversation.update.mockResolvedValue({ id: 'conv1', assignedToId: 'u9' });
+    prisma.conversation.update.mockResolvedValue({
+      id: 'conv1',
+      assignedToId: 'u9',
+    });
 
-    await service.updateConversation(tenantId, 'conv1', { assignedToId: 'u9', status: 'pending' });
+    await service.updateConversation(tenantId, 'conv1', {
+      assignedToId: 'u9',
+      status: 'pending',
+    });
 
     expect(prisma.conversation.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'conv1' },
-        data: expect.objectContaining({ assignedToId: 'u9', status: 'pending' }),
+        data: expect.objectContaining({
+          assignedToId: 'u9',
+          status: 'pending',
+        }),
       }),
     );
   });
@@ -151,7 +183,12 @@ describe('WhatsappService', () => {
     prisma.conversation.findFirst.mockResolvedValue({ id: 'conv1', tenantId });
     prisma.message.create.mockResolvedValue({ id: 'note1' });
 
-    await service.addNote(tenantId, 'conv1', 'agent-1', 'VIP customer, handle with care');
+    await service.addNote(
+      tenantId,
+      'conv1',
+      'agent-1',
+      'VIP customer, handle with care',
+    );
 
     expect(prisma.message.create).toHaveBeenCalledWith({
       data: expect.objectContaining({

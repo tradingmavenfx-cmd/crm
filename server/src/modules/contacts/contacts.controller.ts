@@ -38,10 +38,7 @@ export class ContactsController {
   }
 
   @Get(':id')
-  findOne(
-    @CurrentUser('tenantId') tenantId: string,
-    @Param('id') id: string,
-  ) {
+  findOne(@CurrentUser('tenantId') tenantId: string, @Param('id') id: string) {
     return this.contactsService.findOne(tenantId, id);
   }
 
@@ -57,10 +54,7 @@ export class ContactsController {
 
   @Delete(':id')
   @Roles(Role.TENANT_ADMIN, Role.MANAGER)
-  remove(
-    @CurrentUser('tenantId') tenantId: string,
-    @Param('id') id: string,
-  ) {
+  remove(@CurrentUser('tenantId') tenantId: string, @Param('id') id: string) {
     return this.contactsService.remove(tenantId, id);
   }
 }

@@ -1,4 +1,8 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   SendResult,
@@ -41,7 +45,9 @@ export class MetaCloudProvider implements WhatsAppProvider {
 
     const data = (await res.json()) as GraphResponse;
     if (!res.ok || !data.messages?.length) {
-      this.logger.error(`WhatsApp send failed: ${data.error?.message ?? res.status}`);
+      this.logger.error(
+        `WhatsApp send failed: ${data.error?.message ?? res.status}`,
+      );
       throw new InternalServerErrorException('WhatsApp send failed');
     }
     return { externalId: data.messages[0].id };

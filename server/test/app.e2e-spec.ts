@@ -41,7 +41,9 @@ describe('App (e2e)', () => {
   });
 
   it('GET /api/health -> 200 (public route)', async () => {
-    const res = await request(app.getHttpServer()).get('/api/health').expect(200);
+    const res = await request(app.getHttpServer())
+      .get('/api/health')
+      .expect(200);
     expect(res.body.status).toBe('ok');
     expect(res.body.service).toBe('crm-server');
   });
