@@ -15,10 +15,10 @@ See [`implementation_plan.md`](./implementation_plan.md) for the full 6-phase ro
 
 ## Build Status
 
-Phase 1 is complete. **Phase 2 — Communication Hub** has every channel
-plumbed end to end (WhatsApp, email, SMS, voice/IVR, unified inbox); the
-campaign, AI and live-chat/video layers on top of it are still open — see
-[What's left in Phase 2](#whats-left-in-phase-2).
+Phases 1 and 2 are complete, apart from the Phase 2 features that depend on an
+LLM or on WebRTC — those move to Phase 3 alongside the rest of the AI work. See
+[What's left in Phase 2](#whats-left-in-phase-2). **Phase 3 — Intelligence &
+Automation** is next.
 
 - [x] Monorepo scaffolding
 - [x] NestJS backend foundation (config, Prisma, global guards, Swagger)
@@ -38,7 +38,7 @@ campaign, AI and live-chat/video layers on top of it are still open — see
 - [x] Frontend CRUD screens: Contacts, Companies, Deals (pipeline board), Tasks
 - [x] Polish: debounced search, pagination, edit-in-place, contact↔company linking, inline task status
 
-## Phase 2 — Communication Hub (channels done, layers on top pending)
+## Phase 2 — Communication Hub
 
 - [x] WhatsApp Business API backend (provider abstraction: Meta Cloud API + dev mock)
 - [x] Conversations + Messages models (omnichannel-ready — WhatsApp/email/SMS/chat)
@@ -58,10 +58,22 @@ campaign, AI and live-chat/video layers on top of it are still open — see
       call log + analytics, missed-call automation
 - [x] Calls and voicemails threaded into the unified inbox
 - [x] IVR builder UI, call log + analytics UI, SMS templates + DND list UI
+- [x] WhatsApp interactive messages (quick-reply buttons, list messages) and
+      media messages (image/video/document/audio); button taps land as inbound
+- [x] Campaigns — one engine for WhatsApp broadcasts, bulk email and SMS
+      campaigns: audience segments, merge-field personalisation, scheduling,
+      per-recipient results, opt-out-aware
+- [x] Email open/click tracking (pixel + link rewriting) with an analytics view
+- [x] Email sequences — multi-step drip with per-step delays, auto-stop on reply
+- [x] Live chat — embeddable website widget, visitor/page tracking, chat ratings,
+      threads land in the unified inbox
+- [x] Unified inbox: @mentions on internal notes, auto-assignment rules
+      (keyword and round-robin routing across every channel)
 
-Every channel can send, receive, thread and land in one inbox. What is built
-is the channel plumbing; the campaign/AI layers that sit on top of it, and two
-further channels, are not — see [What's left in Phase 2](#whats-left-in-phase-2).
+Six channels — WhatsApp, email, SMS, voice/IVR, live chat and call logs — send,
+receive, thread and land in one inbox, with campaigns, sequences and routing on
+top. What remains needs an LLM or WebRTC: see
+[What's left in Phase 2](#whats-left-in-phase-2).
 
 ### Channels work without credentials
 
@@ -115,6 +127,46 @@ Against a real Twilio number, point the voice webhook at
 `$VOICE_PUBLIC_URL/voice/webhook/<tenantId>/incoming` — in dev that needs a
 tunnel, since Twilio must reach the callback URL.
 
+### Campaigns, sequences & tracking
+
+One campaign engine covers WhatsApp broadcasts, bulk email and SMS campaigns.
+An audience is a segment (explicit contacts, or a filter on score/company/owner),
+bodies support `{{firstName}}`/`{{fullName}}` merge fields, and `GET
+/api/campaigns/:id/preview` shows who would be reached before anything is sent.
+Each recipient is independent — an opt-out is recorded as *skipped*, a provider
+error as *failed*, and the rest of the batch continues. Scheduled campaigns are
+picked up by a cron each minute.
+
+Outbound email is instrumented automatically: links are rewritten to trackable
+short links and an open pixel is appended (`EMAIL_TRACKING=false` turns this
+off). `GET /api/tracking/stats` reports open/click rates and the most-clicked
+links, and opens/clicks roll up to their campaign.
+
+Sequences are multi-step email drips. Each step waits its own `delayHours`, the
+runner sends what is due every minute, and a reply from the contact stops the
+chain when `stopOnReply` is set.
+
+### Live chat
+
+`GET /api/chat/:tenantId/widget.js` serves a self-contained widget — one script
+tag on any site. It keeps a visitor key in `localStorage` so a refresh resumes
+the same conversation, polls for agent replies, and reports the page the visitor
+is on. Chats appear in the unified inbox like any other channel; internal notes
+are never exposed to the visitor. Visitors can rate the chat afterwards, and
+`GET /api/chat/visitors` gives agents the live list with an online/offline flag.
+
+### Routing & collaboration
+
+Auto-assignment rules route new conversations on any channel: rules run in
+priority order, match on keywords in the first inbound message (or act as a
+catch-all), and assign either to a specific agent or round-robin to whoever has
+the fewest open conversations. Already-assigned conversations are never
+reassigned, and a routing failure can never block an inbound message.
+
+`@name` inside an internal note creates a mention for that teammate — matched on
+first name, last name or email local-part — surfaced through
+`GET /api/inbox/mentions`. Authors are never notified about their own notes.
+
 ### SMS
 
 Two-way SMS threads land in the same inbox. Templates support `{{merge}}` fields,
@@ -125,26 +177,25 @@ of the code is stored, codes expire in 5 minutes, and there is a 5-attempt limit
 
 ### What's left in Phase 2
 
-Measured against the full Phase 2 scope in `implementation_plan.md`, roughly
-60% is built. The foundation — sending, receiving, threading and the unified
-inbox for four channels — is done; these are not:
+Everything remaining needs either an LLM or WebRTC/media infrastructure, so it
+is deferred to Phase 3 where the AI work lives:
 
-| Plan section | Not built |
-|---|---|
-| 2.1 WhatsApp | Interactive messages (quick-reply buttons, list messages), media messages, chatbot, broadcast campaigns, product catalog/commerce |
-| 2.2 IVR & telephony | Predictive/auto dialer, AI voice agent and post-call summaries, browser softphone (WebRTC), call sentiment and keyword spotting, speech-to-text (the `transcript` field exists but nothing populates it automatically) |
-| 2.3 Email | Open/click tracking, email sequences, bulk campaigns, IMAP/Gmail/Outlook sync, drag-and-drop template builder, AI email writer |
-| 2.4 Live chat | The whole section — no website chat widget |
-| 2.5 Video calling | The whole section |
-| 2.6 Unified inbox | Social DMs, @mentions, auto-assign rules, AI reply suggestions |
+| Plan section | Deferred | Needs |
+|---|---|---|
+| 2.1 WhatsApp | Chatbot / lead-qualification bot, product catalog & commerce | LLM; Meta commerce APIs |
+| 2.2 IVR & telephony | AI voice agent, post-call summaries, sentiment & keyword spotting, speech-to-text, predictive dialer, browser softphone | LLM / speech APIs; WebRTC |
+| 2.3 Email | IMAP/Gmail/Outlook two-way sync, drag-and-drop template builder, AI email writer | OAuth apps per provider; LLM |
+| 2.4 Live chat | Chatbot with human handoff, proactive triggers, file sharing | LLM; file storage |
+| 2.5 Video calling | The whole section | WebRTC + a media server |
+| 2.6 Unified inbox | Social DMs (Instagram/Facebook/X), AI reply suggestions | Platform apps; LLM |
 
 Call recording is stored as a provider URL only — the CRM does not host audio.
+The `transcript` field on a call exists but nothing populates it automatically.
 
-Most of the remaining work is a campaign/automation layer over channels that
-already work, which is why the Phase 3 workflow engine is a natural next step:
-its triggers ("incoming WhatsApp/email/call", "stage changed") and its actions
-(send on any channel, create a task, assign an owner) both already exist. The
-missed-call automation shipped here is effectively one hardcoded workflow.
+Phase 3's workflow engine is the natural next step: its triggers ("incoming
+WhatsApp/email/call", "stage changed") and its actions (send on any channel,
+create a task, assign an owner) already exist here. The missed-call automation
+and the assignment rules are effectively two hardcoded workflows.
 
 ### Verify locally
 
@@ -187,10 +238,12 @@ npm run dev                   # http://localhost:3000
 ```
 
 Routes: `/` landing, `/login`, `/register`, and the auth-guarded shell with
-`/dashboard`, `/inbox` (unified, all channels), `/contacts`, `/companies`,
-`/deals`, `/tasks`, `/calls` (call log, analytics, click-to-call),
-`/ivr-flows` (IVR menu builder), `/email-templates`, `/sms-templates` (templates
-plus the DND list).
+`/dashboard`, `/inbox` (unified, all channels, plus @mentions and auto-assign
+rules), `/contacts`, `/companies`, `/deals`, `/tasks`, `/calls` (call log,
+analytics, click-to-call), `/campaigns` (campaigns + email analytics),
+`/sequences` (drip builder and enrolments), `/live-chat` (visitors, ratings,
+widget snippet), `/ivr-flows` (IVR menu builder), `/email-templates`,
+`/sms-templates` (templates plus the DND list).
 
 ## Run the whole stack with Docker (recommended)
 

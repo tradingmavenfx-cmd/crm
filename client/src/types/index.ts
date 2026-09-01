@@ -177,3 +177,128 @@ export interface CallAnalytics {
     talkTimeSec: number;
   }[];
 }
+
+export type CampaignStatus =
+  | 'DRAFT'
+  | 'SCHEDULED'
+  | 'RUNNING'
+  | 'COMPLETED'
+  | 'CANCELLED';
+
+export interface CampaignSegment {
+  contactIds?: string[];
+  minScore?: number;
+  companyId?: string;
+  ownerId?: string;
+}
+
+export interface Campaign {
+  id: string;
+  name: string;
+  channel: string;
+  status: CampaignStatus;
+  subject: string | null;
+  body: string | null;
+  whatsappTemplateName: string | null;
+  segment: CampaignSegment;
+  scheduledAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  _count?: { recipients: number };
+}
+
+export interface CampaignStats {
+  total: number;
+  sent: number;
+  skipped: number;
+  failed: number;
+  opened: number;
+  clicked: number;
+  openRate: number;
+  clickRate: number;
+}
+
+export interface CampaignPreview {
+  total: number;
+  reachable: number;
+  unreachable: number;
+  sample: { id: string; name: string; address: string | null }[];
+}
+
+export interface SequenceStep {
+  id?: string;
+  order?: number;
+  delayHours: number;
+  subject: string;
+  body: string;
+}
+
+export interface Sequence {
+  id: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  stopOnReply: boolean;
+  steps: SequenceStep[];
+  _count?: { enrollments: number };
+}
+
+export interface SequenceEnrollment {
+  id: string;
+  status: 'ACTIVE' | 'COMPLETED' | 'STOPPED';
+  currentStep: number;
+  nextRunAt: string;
+  stopReason: string | null;
+  contact: { id: string; firstName: string; lastName: string; email: string | null };
+}
+
+export interface ChatVisitor {
+  id: string;
+  visitorKey: string;
+  name: string | null;
+  email: string | null;
+  currentPage: string | null;
+  pageViews: number;
+  lastSeenAt: string;
+  conversationId: string | null;
+  online: boolean;
+}
+
+export interface ChatRatings {
+  total: number;
+  average: number;
+  comments: { rating: number | null; comment: string | null }[];
+}
+
+export interface EmailStats {
+  sent: number;
+  uniqueOpens: number;
+  uniqueClicks: number;
+  openRate: number;
+  clickRate: number;
+  topLinks: { url: string; clicks: number }[];
+}
+
+export interface AssignmentRule {
+  id: string;
+  name: string;
+  isActive: boolean;
+  priority: number;
+  channel: string | null;
+  conditions: { keywords?: string[] };
+  strategy: string;
+  assignToId: string | null;
+  assignTo?: { id: string; firstName: string; lastName: string } | null;
+}
+
+export interface Mention {
+  id: string;
+  readAt: string | null;
+  createdAt: string;
+  message: {
+    id: string;
+    body: string | null;
+    conversationId: string;
+    createdAt: string;
+  };
+}

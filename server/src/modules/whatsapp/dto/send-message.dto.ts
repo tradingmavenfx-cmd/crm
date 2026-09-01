@@ -1,9 +1,14 @@
+import { Type } from 'class-transformer';
 import {
+  ArrayNotEmpty,
   IsArray,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUrl,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 
 export class SendMessageDto {
@@ -30,4 +35,69 @@ export class SendMessageDto {
   @IsArray()
   @IsString({ each: true })
   parameters?: string[];
+}
+
+export class InteractiveOptionDto {
+  @IsString()
+  @IsNotEmpty()
+  id!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  title!: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+}
+
+export class SendInteractiveDto {
+  @IsString()
+  @IsNotEmpty()
+  to!: string;
+
+  @IsIn(['buttons', 'list'])
+  type!: 'buttons' | 'list';
+
+  @IsString()
+  @IsNotEmpty()
+  body!: string;
+
+  @IsOptional()
+  @IsString()
+  header?: string;
+
+  @IsOptional()
+  @IsString()
+  footer?: string;
+
+  @IsOptional()
+  @IsString()
+  listButtonText?: string;
+
+  @IsArray()
+  @ArrayNotEmpty()
+  @ValidateNested({ each: true })
+  @Type(() => InteractiveOptionDto)
+  options!: InteractiveOptionDto[];
+}
+
+export class SendMediaDto {
+  @IsString()
+  @IsNotEmpty()
+  to!: string;
+
+  @IsIn(['image', 'video', 'document', 'audio'])
+  kind!: 'image' | 'video' | 'document' | 'audio';
+
+  @IsUrl()
+  url!: string;
+
+  @IsOptional()
+  @IsString()
+  caption?: string;
+
+  @IsOptional()
+  @IsString()
+  filename?: string;
 }

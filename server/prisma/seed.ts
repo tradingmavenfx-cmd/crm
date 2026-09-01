@@ -212,6 +212,63 @@ async function seedTelephonyAndSms(tenantId: string): Promise<void> {
     });
   }
 
+  const ruleCount = await prisma.assignmentRule.count({ where: { tenantId } });
+  if (ruleCount === 0 && rep) {
+    await prisma.assignmentRule.create({
+      data: {
+        tenantId,
+        name: 'Billing questions to the rep',
+        priority: 0,
+        conditions: { keywords: ['invoice', 'refund', 'billing', 'payment'] },
+        strategy: 'specific',
+        assignToId: rep.id,
+      },
+    });
+    await prisma.assignmentRule.create({
+      data: {
+        tenantId,
+        name: 'Everything else, round robin',
+        priority: 10,
+        conditions: {},
+        strategy: 'round_robin',
+      },
+    });
+  }
+
+  const sequenceCount = await prisma.sequence.count({ where: { tenantId } });
+  if (sequenceCount === 0) {
+    await prisma.sequence.create({
+      data: {
+        tenantId,
+        name: 'New lead nurture',
+        description: 'Three touches over a week, stops the moment they reply.',
+        stopOnReply: true,
+        steps: {
+          create: [
+            {
+              order: 0,
+              delayHours: 1,
+              subject: 'Thanks for getting in touch, {{firstName}}',
+              body: '<p>Hi {{firstName}}, thanks for your interest in Acme CRM. Happy to set up a quick demo.</p>',
+            },
+            {
+              order: 1,
+              delayHours: 48,
+              subject: 'Anything I can help with?',
+              body: '<p>Just checking in, {{firstName}} - any questions about pricing or GST invoicing?</p>',
+            },
+            {
+              order: 2,
+              delayHours: 120,
+              subject: 'Closing the loop',
+              body: '<p>No worries if the timing is off, {{firstName}}. I will leave this here for now.</p>',
+            },
+          ],
+        },
+      },
+    });
+  }
+
   const templateCount = await prisma.smsTemplate.count({ where: { tenantId } });
   if (templateCount === 0) {
     await prisma.smsTemplate.createMany({

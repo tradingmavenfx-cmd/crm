@@ -8,11 +8,13 @@ import { MessageStatus } from '@prisma/client';
 import { SmsService } from './sms.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SMS_PROVIDER, SmsProvider } from './providers/sms-provider.interface';
+import { RoutingService } from '../routing/routing.service';
 
 describe('SmsService', () => {
   let service: SmsService;
   let prisma: any;
   let provider: jest.Mocked<SmsProvider>;
+  let routing: { autoAssign: jest.Mock };
   const tenantId = 'tenant-1';
 
   beforeEach(async () => {
@@ -50,12 +52,14 @@ describe('SmsService', () => {
       },
     };
     provider = { send: jest.fn().mockResolvedValue({ externalId: 'SM123' }) };
+    routing = { autoAssign: jest.fn().mockResolvedValue(null) };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         SmsService,
         { provide: PrismaService, useValue: prisma },
         { provide: SMS_PROVIDER, useValue: provider },
+        { provide: RoutingService, useValue: routing },
       ],
     }).compile();
 

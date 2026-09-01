@@ -5,6 +5,8 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  SendInteractiveInput,
+  SendMediaInput,
   SendResult,
   SendTemplateInput,
   SendTextInput,
@@ -59,6 +61,72 @@ export class MetaCloudProvider implements WhatsAppProvider {
       to: input.to,
       type: 'text',
       text: { body: input.text },
+    });
+  }
+
+  /**
+   * Quick-reply buttons (max 3) or a single-section list (max 10 rows), per the
+   * Cloud API interactive message schema.
+   */
+  sendInteractive(input: SendInteractiveInput): Promise<SendResult> {
+    const interactive =
+      input.type === 'buttons'
+        ? {
+            type: 'button',
+            body: { text: input.body },
+            action: {
+              buttons: input.options.slice(0, 3).map((o) => ({
+                type: 'reply',
+                reply: { id: o.id, title: o.title },
+              })),
+            },
+          }
+        : {
+            type: 'list',
+            body: { text: input.body },
+            action: {
+              button: input.listButtonText ?? 'Choose',
+              sections: [
+                {
+                  title: input.header ?? 'Options',
+                  rows: input.options.slice(0, 10).map((o) => ({
+                    id: o.id,
+                    title: o.title,
+                    description: o.description,
+                  })),
+                },
+              ],
+            },
+          };
+
+    return this.post({
+      messaging_product: 'whatsapp',
+      to: input.to,
+      type: 'interactive',
+      interactive: {
+        ...interactive,
+        ...(input.header && input.type === 'buttons'
+          ? { header: { type: 'text', text: input.header } }
+          : {}),
+        ...(input.footer ? { footer: { text: input.footer } } : {}),
+      },
+    });
+  }
+
+  sendMedia(input: SendMediaInput): Promise<SendResult> {
+    return this.post({
+      messaging_product: 'whatsapp',
+      to: input.to,
+      type: input.kind,
+      [input.kind]: {
+        link: input.url,
+        ...(input.caption && input.kind !== 'audio'
+          ? { caption: input.caption }
+          : {}),
+        ...(input.filename && input.kind === 'document'
+          ? { filename: input.filename }
+          : {}),
+      },
     });
   }
 

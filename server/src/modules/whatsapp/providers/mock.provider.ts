@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import {
+  SendInteractiveInput,
+  SendMediaInput,
   SendResult,
   SendTemplateInput,
   SendTextInput,
@@ -24,6 +26,20 @@ export class MockWhatsAppProvider implements WhatsAppProvider {
     this.logger.log(
       `[mock] template "${input.templateName}" -> ${input.to} (${input.parameters?.join(', ') ?? ''})`,
     );
+    return { externalId: `mock-${randomUUID()}` };
+  }
+
+  async sendInteractive(input: SendInteractiveInput): Promise<SendResult> {
+    this.logger.log(
+      `[mock] ${input.type} -> ${input.to}: "${input.body}" [${input.options
+        .map((o) => o.title)
+        .join(' | ')}]`,
+    );
+    return { externalId: `mock-${randomUUID()}` };
+  }
+
+  async sendMedia(input: SendMediaInput): Promise<SendResult> {
+    this.logger.log(`[mock] ${input.kind} -> ${input.to}: ${input.url}`);
     return { externalId: `mock-${randomUUID()}` };
   }
 }

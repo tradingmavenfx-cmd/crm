@@ -26,23 +26,32 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users           User[]
-  contacts        Contact[]
-  companies       Company[]
-  deals           Deal[]
-  dealStages      DealStage[]
-  activities      Activity[]
-  tasks           Task[]
-  auditLogs       AuditLog[]
-  conversations   Conversation[]
-  messages        Message[]
-  cannedResponses CannedResponse[]
-  emailTemplates  EmailTemplate[]
-  smsTemplates    SmsTemplate[]
-  smsOptOuts      SmsOptOut[]
-  smsOtps         SmsOtp[]
-  ivrFlows        IvrFlow[]
-  calls           Call[]
+  users              User[]
+  contacts           Contact[]
+  companies          Company[]
+  deals              Deal[]
+  dealStages         DealStage[]
+  activities         Activity[]
+  tasks              Task[]
+  auditLogs          AuditLog[]
+  conversations      Conversation[]
+  messages           Message[]
+  cannedResponses    CannedResponse[]
+  emailTemplates     EmailTemplate[]
+  smsTemplates       SmsTemplate[]
+  smsOptOuts         SmsOptOut[]
+  smsOtps            SmsOtp[]
+  ivrFlows           IvrFlow[]
+  calls              Call[]
+  campaigns          Campaign[]
+  campaignRecipients CampaignRecipient[]
+  emailEvents        EmailEvent[]
+  shortLinks         ShortLink[]
+  sequences          Sequence[]
+  enrollments        SequenceEnrollment[]
+  chatVisitors       ChatVisitor[]
+  mentions           Mention[]
+  assignmentRules    AssignmentRule[]
 
   @@map("tenants")
 }
@@ -76,16 +85,19 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  tenant                Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  ownedContacts         Contact[]      @relation("ContactOwner")
-  ownedCompanies        Company[]      @relation("CompanyOwner")
-  ownedDeals            Deal[]         @relation("DealOwner")
+  tenant                Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ownedContacts         Contact[]        @relation("ContactOwner")
+  ownedCompanies        Company[]        @relation("CompanyOwner")
+  ownedDeals            Deal[]           @relation("DealOwner")
   activities            Activity[]
-  assignedTasks         Task[]         @relation("TaskAssignee")
-  createdTasks          Task[]         @relation("TaskCreator")
+  assignedTasks         Task[]           @relation("TaskAssignee")
+  createdTasks          Task[]           @relation("TaskCreator")
   auditLogs             AuditLog[]
-  assignedConversations Conversation[] @relation("ConversationAssignee")
-  handledCalls          Call[]         @relation("CallAgent")
+  assignedConversations Conversation[]   @relation("ConversationAssignee")
+  handledCalls          Call[]           @relation("CallAgent")
+  createdCampaigns      Campaign[]       @relation("CampaignCreator")
+  mentions              Mention[]        @relation("MentionedUser")
+  assignmentRules       AssignmentRule[] @relation("RuleAssignee")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -133,13 +145,15 @@ model Contact {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  company       Company?       @relation(fields: [companyId], references: [id])
-  owner         User?          @relation("ContactOwner", fields: [ownerId], references: [id])
-  deals         Deal[]
-  activities    Activity[]
-  conversations Conversation[]
-  calls         Call[]
+  tenant             Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company            Company?             @relation(fields: [companyId], references: [id])
+  owner              User?                @relation("ContactOwner", fields: [ownerId], references: [id])
+  deals              Deal[]
+  activities         Activity[]
+  conversations      Conversation[]
+  calls              Call[]
+  campaignRecipients CampaignRecipient[]
+  enrollments        SequenceEnrollment[]
 
   @@index([tenantId])
   @@index([tenantId, email])
@@ -298,11 +312,16 @@ model Conversation {
 
   firstResponseAt DateTime?
 
-  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  contact    Contact?  @relation(fields: [contactId], references: [id])
-  assignedTo User?     @relation("ConversationAssignee", fields: [assignedToId], references: [id])
+  /// Post-chat rating (1-5) and optional comment, collected by the widget
+  rating        Int?
+  ratingComment String?
+
+  tenant     Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact    Contact?      @relation(fields: [contactId], references: [id])
+  assignedTo User?         @relation("ConversationAssignee", fields: [assignedToId], references: [id])
   messages   Message[]
   calls      Call[]
+  visitors   ChatVisitor[]
 
   @@unique([tenantId, channel, externalId])
   @@index([tenantId, channel])
@@ -331,6 +350,8 @@ model Message {
 
   tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  events       EmailEvent[]
+  mentions     Mention[]
 
   @@index([tenantId, conversationId])
   @@index([externalId])
@@ -502,4 +523,265 @@ model SmsOtp {
 
   @@index([tenantId, phone])
   @@map("sms_otps")
+}
+
+// -----------------------------------------------------------
+// Campaigns - broadcast & bulk send (Phase 2.1 / 2.3 / 2.4)
+// -----------------------------------------------------------
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  COMPLETED
+  CANCELLED
+}
+
+model Campaign {
+  id       String         @id @default(uuid())
+  tenantId String
+  name     String
+  channel  Channel
+  status   CampaignStatus @default(DRAFT)
+
+  /// Email subject; unused on other channels
+  subject              String?
+  /// Message body, with {{merge}} fields
+  body                 String?
+  /// Optional saved template to render from (email or SMS)
+  templateId           String?
+  /// WhatsApp needs a pre-approved template name for business-initiated sends
+  whatsappTemplateName String?
+
+  /// Audience filter: { contactIds?, minScore?, companyId?, ownerId? }
+  segment     Json      @default("{}")
+  scheduledAt DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy  User?               @relation("CampaignCreator", fields: [createdById], references: [id])
+  recipients CampaignRecipient[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, scheduledAt])
+  @@map("campaigns")
+}
+
+model CampaignRecipient {
+  id         String    @id @default(uuid())
+  tenantId   String
+  campaignId String
+  contactId  String?
+  /// Email address or phone number actually used
+  address    String
+  /// pending | sent | skipped | failed
+  status     String    @default("pending")
+  /// Why a recipient was skipped or failed (opted_out, no_address, provider error)
+  reason     String?
+  /// The Message row created for this send, if any
+  messageId  String?
+  sentAt     DateTime?
+  openedAt   DateTime?
+  clickedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact  Contact? @relation(fields: [contactId], references: [id])
+
+  @@unique([campaignId, address])
+  @@index([tenantId, campaignId])
+  @@map("campaign_recipients")
+}
+
+// -----------------------------------------------------------
+// Email open/click tracking (Phase 2.3)
+// -----------------------------------------------------------
+
+model EmailEvent {
+  id        String   @id @default(uuid())
+  tenantId  String
+  messageId String
+  /// open | click
+  type      String
+  /// Destination for a click event
+  url       String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, messageId])
+  @@index([tenantId, type])
+  @@map("email_events")
+}
+
+/// Trackable short links - used for click tracking in SMS and email bodies.
+model ShortLink {
+  id         String   @id @default(uuid())
+  tenantId   String
+  code       String   @unique
+  url        String
+  messageId  String?
+  campaignId String?
+  clicks     Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("short_links")
+}
+
+// -----------------------------------------------------------
+// Email sequences - automated follow-up chains (Phase 2.3)
+// -----------------------------------------------------------
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  STOPPED
+}
+
+model Sequence {
+  id          String  @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  isActive    Boolean @default(true)
+  /// Stop the chain as soon as the contact replies on this channel
+  stopOnReply Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  steps       SequenceStep[]
+  enrollments SequenceEnrollment[]
+
+  @@index([tenantId])
+  @@map("sequences")
+}
+
+model SequenceStep {
+  id         String @id @default(uuid())
+  sequenceId String
+  /// 0-based position in the chain
+  order      Int
+  /// Wait this long after the previous step before sending
+  delayHours Int    @default(24)
+  subject    String
+  body       String
+
+  sequence Sequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+
+  @@unique([sequenceId, order])
+  @@map("sequence_steps")
+}
+
+model SequenceEnrollment {
+  id          String           @id @default(uuid())
+  tenantId    String
+  sequenceId  String
+  contactId   String
+  status      EnrollmentStatus @default(ACTIVE)
+  /// Index of the next step to send
+  currentStep Int              @default(0)
+  nextRunAt   DateTime
+  stopReason  String?
+  enrolledAt  DateTime         @default(now())
+  completedAt DateTime?
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sequence Sequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([sequenceId, contactId])
+  @@index([tenantId, status, nextRunAt])
+  @@map("sequence_enrollments")
+}
+
+// -----------------------------------------------------------
+// Live chat (Phase 2.4)
+// -----------------------------------------------------------
+
+/// A website visitor talking to the team through the chat widget. The thread
+/// itself is a Conversation on the LIVE_CHAT channel.
+model ChatVisitor {
+  id         String @id @default(uuid())
+  tenantId   String
+  /// Opaque key held by the browser, used to resume a session
+  visitorKey String @unique
+
+  name        String?
+  email       String?
+  /// Page the visitor is on right now, for agent context
+  currentPage String?
+  userAgent   String?
+  /// Number of pages seen this session
+  pageViews   Int      @default(1)
+  startedAt   DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  conversationId String?
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, lastSeenAt])
+  @@map("chat_visitors")
+}
+
+// -----------------------------------------------------------
+// Team collaboration & routing (Phase 2.6)
+// -----------------------------------------------------------
+
+/// An @mention of a teammate inside an internal note.
+model Mention {
+  id        String    @id @default(uuid())
+  tenantId  String
+  messageId String
+  userId    String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation("MentionedUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([tenantId, userId, readAt])
+  @@map("mentions")
+}
+
+/// Routes new conversations to an agent automatically.
+model AssignmentRule {
+  id         String   @id @default(uuid())
+  tenantId   String
+  name       String
+  isActive   Boolean  @default(true)
+  /// Lower runs first; the first matching rule wins
+  priority   Int      @default(0)
+  /// Limit the rule to one channel, or leave null for all
+  channel    Channel?
+  /// Match on message text: { keywords: ["refund", "invoice"] }
+  conditions Json     @default("{}")
+  /// specific | round_robin
+  strategy   String   @default("specific")
+  assignToId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignTo User?  @relation("RuleAssignee", fields: [assignToId], references: [id])
+
+  @@index([tenantId, isActive, priority])
+  @@map("assignment_rules")
 }

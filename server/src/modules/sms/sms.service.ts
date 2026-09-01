@@ -11,6 +11,7 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SendBulkSmsDto, SendSmsDto } from './dto/send-sms.dto';
 import { SMS_PROVIDER, SmsProvider } from './providers/sms-provider.interface';
+import { RoutingService } from '../routing/routing.service';
 
 export interface InboundSmsDto {
   from: string;
@@ -44,6 +45,7 @@ export class SmsService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(SMS_PROVIDER) private readonly provider: SmsProvider,
+    private readonly routing: RoutingService,
   ) {}
 
   /** Strips spaces/dashes so the same number always maps to one conversation. */
@@ -246,6 +248,13 @@ export class SmsService {
       where: { id: conversation.id },
       data: { lastMessageAt: new Date(), status: 'open' },
     });
+
+    await this.routing.autoAssign(
+      tenantId,
+      conversation.id,
+      Channel.SMS,
+      message.body,
+    );
 
     return message;
   }

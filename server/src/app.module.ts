@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD } from '@nestjs/core';
 import configuration from './config/configuration';
 import { PrismaModule } from './prisma/prisma.module';
@@ -13,6 +14,11 @@ import { TasksModule } from './modules/tasks/tasks.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { EmailModule } from './modules/email/email.module';
 import { SmsModule } from './modules/sms/sms.module';
+import { TrackingModule } from './modules/tracking/tracking.module';
+import { RoutingModule } from './modules/routing/routing.module';
+import { CampaignsModule } from './modules/campaigns/campaigns.module';
+import { SequencesModule } from './modules/sequences/sequences.module';
+import { ChatModule } from './modules/chat/chat.module';
 import { VoiceModule } from './modules/voice/voice.module';
 import { InboxModule } from './modules/inbox/inbox.module';
 import { HealthController } from './modules/health/health.controller';
@@ -25,6 +31,8 @@ import { RolesGuard } from './common/guards/roles.guard';
       isGlobal: true,
       load: [configuration],
     }),
+    // Drives scheduled campaigns and the sequence step runner.
+    ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
     UsersModule,
@@ -37,6 +45,11 @@ import { RolesGuard } from './common/guards/roles.guard';
     EmailModule,
     SmsModule,
     VoiceModule,
+    TrackingModule,
+    RoutingModule,
+    CampaignsModule,
+    SequencesModule,
+    ChatModule,
     InboxModule,
   ],
   controllers: [HealthController],

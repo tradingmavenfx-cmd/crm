@@ -5,8 +5,10 @@ import { WhatsappController } from './whatsapp.controller';
 import { WHATSAPP_PROVIDER } from './providers/whatsapp-provider.interface';
 import { MetaCloudProvider } from './providers/meta-cloud.provider';
 import { MockWhatsAppProvider } from './providers/mock.provider';
+import { RoutingModule } from '../routing/routing.module';
 
 @Module({
+  imports: [RoutingModule],
   controllers: [WhatsappController],
   providers: [
     WhatsappService,

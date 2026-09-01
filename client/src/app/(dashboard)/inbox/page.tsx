@@ -3,7 +3,14 @@
 import { FormEvent, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { CannedResponse, Conversation, Message, TenantUser } from '@/types';
+import {
+  AssignmentRule,
+  CannedResponse,
+  Conversation,
+  Mention,
+  Message,
+  TenantUser,
+} from '@/types';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Modal } from '@/components/ui/Modal';
 import { Field } from '@/components/ui/Field';
@@ -16,6 +23,7 @@ const CHANNEL_FILTERS = [
   { value: 'EMAIL', label: 'Email' },
   { value: 'SMS', label: 'SMS' },
   { value: 'VOICE', label: 'Calls' },
+  { value: 'LIVE_CHAT', label: 'Live chat' },
 ];
 
 const channelBadge: Record<string, string> = {
@@ -23,6 +31,7 @@ const channelBadge: Record<string, string> = {
   EMAIL: 'bg-blue-100 text-blue-700',
   SMS: 'bg-purple-100 text-purple-700',
   VOICE: 'bg-orange-100 text-orange-700',
+  LIVE_CHAT: 'bg-teal-100 text-teal-700',
 };
 
 const channelLabel: Record<string, string> = {
@@ -30,6 +39,7 @@ const channelLabel: Record<string, string> = {
   EMAIL: 'Email',
   SMS: 'SMS',
   VOICE: 'Call',
+  LIVE_CHAT: 'Chat',
 };
 
 /** Call logs and voicemails carry their detail on the message metadata. */
@@ -103,6 +113,8 @@ export default function InboxPage() {
   const [newOpen, setNewOpen] = useState(false);
   const [newChannel, setNewChannel] = useState('WHATSAPP');
   const [composer, setComposer] = useState('');
+  const [mentionsOpen, setMentionsOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
 
   const conversations = useQuery({
     queryKey: ['inbox', 'conversations', channel],
@@ -135,6 +147,40 @@ export default function InboxPage() {
     queryKey: ['whatsapp', 'canned'],
     queryFn: async () =>
       (await api.get<CannedResponse[]>('/whatsapp/canned-responses')).data,
+  });
+
+  const mentions = useQuery({
+    queryKey: ['inbox', 'mentions'],
+    queryFn: async () => (await api.get<Mention[]>('/inbox/mentions')).data,
+    refetchInterval: 30_000,
+  });
+
+  const rules = useQuery({
+    queryKey: ['inbox', 'assignment-rules'],
+    queryFn: async () =>
+      (await api.get<AssignmentRule[]>('/inbox/assignment-rules')).data,
+    enabled: rulesOpen,
+  });
+
+  const saveRule = useMutation({
+    mutationFn: async (body: Record<string, unknown>) =>
+      (await api.post('/inbox/assignment-rules', body)).data,
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ['inbox', 'assignment-rules'] }),
+  });
+
+  const removeRule = useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/inbox/assignment-rules/${id}`);
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ['inbox', 'assignment-rules'] }),
+  });
+
+  const readMention = useMutation({
+    mutationFn: async (id: string) =>
+      (await api.patch(`/inbox/mentions/${id}/read`)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['inbox', 'mentions'] }),
   });
 
   const reply = useMutation({
@@ -196,6 +242,9 @@ export default function InboxPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['inbox'] }),
   });
 
+  const unreadMentions =
+    mentions.data?.filter((m) => !m.readAt).length ?? 0;
+
   const onSend = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selected) return;
@@ -221,12 +270,31 @@ export default function InboxPage() {
       <PageHeader
         title="Unified Inbox"
         action={
-          <button
-            onClick={() => setNewOpen(true)}
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-          >
-            + New chat
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setMentionsOpen(true)}
+              className="relative rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              Mentions
+              {unreadMentions > 0 && (
+                <span className="ml-1 rounded-full bg-red-500 px-1.5 text-[10px] font-semibold text-white">
+                  {unreadMentions}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setRulesOpen(true)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              Auto-assign rules
+            </button>
+            <button
+              onClick={() => setNewOpen(true)}
+              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              + New chat
+            </button>
+          </div>
         }
       />
 
@@ -441,7 +509,7 @@ export default function InboxPage() {
                     }}
                     disabled={addNote.isPending}
                     className="rounded-lg border border-amber-300 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-60"
-                    title="Add internal note (not sent to customer)"
+                    title="Add internal note - @mention a teammate to notify them"
                   >
                     Note
                   </button>
@@ -459,6 +527,167 @@ export default function InboxPage() {
           )}
         </div>
       </div>
+
+      <Modal
+        open={mentionsOpen}
+        title="You were mentioned"
+        onClose={() => setMentionsOpen(false)}
+      >
+        <div className="max-h-80 space-y-2 overflow-y-auto">
+          {(mentions.data?.length ?? 0) === 0 ? (
+            <p className="text-sm text-slate-400">No mentions yet.</p>
+          ) : (
+            mentions.data!.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => {
+                  setSelectedId(m.message.conversationId);
+                  if (!m.readAt) readMention.mutate(m.id);
+                  setMentionsOpen(false);
+                }}
+                className={`block w-full rounded-lg border px-3 py-2 text-left text-sm ${
+                  m.readAt
+                    ? 'border-slate-200 text-slate-500'
+                    : 'border-amber-200 bg-amber-50 text-amber-900'
+                }`}
+              >
+                <p>{m.message.body}</p>
+                <p className="mt-1 text-[10px] text-slate-400">
+                  {new Date(m.createdAt).toLocaleString()}
+                </p>
+              </button>
+            ))
+          )}
+        </div>
+      </Modal>
+
+      <Modal
+        open={rulesOpen}
+        title="Auto-assignment rules"
+        onClose={() => setRulesOpen(false)}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-500">
+            The first matching rule assigns the conversation. Rules run in
+            priority order, lowest first.
+          </p>
+
+          <div className="space-y-2">
+            {(rules.data?.length ?? 0) === 0 ? (
+              <p className="text-sm text-slate-400">No rules yet.</p>
+            ) : (
+              rules.data!.map((r) => (
+                <div
+                  key={r.id}
+                  className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                >
+                  <div>
+                    <p className="font-medium">{r.name}</p>
+                    <p className="text-xs text-slate-400">
+                      {r.channel ?? 'all channels'} ·{' '}
+                      {r.conditions.keywords?.length
+                        ? `keywords: ${r.conditions.keywords.join(', ')}`
+                        : 'catch-all'}{' '}
+                      ·{' '}
+                      {r.strategy === 'round_robin'
+                        ? 'round robin'
+                        : r.assignTo
+                          ? `${r.assignTo.firstName} ${r.assignTo.lastName}`
+                          : 'unassigned'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => removeRule.mutate(r.id)}
+                    className="text-xs text-slate-400 hover:text-red-600"
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const form = new FormData(e.currentTarget);
+              const keywords = String(form.get('keywords') || '')
+                .split(',')
+                .map((k) => k.trim())
+                .filter(Boolean);
+              const strategy = String(form.get('strategy'));
+              saveRule.mutate({
+                name: String(form.get('name')),
+                priority: Number(form.get('priority') || 0),
+                channel: String(form.get('channel') || '') || undefined,
+                conditions: keywords.length ? { keywords } : {},
+                strategy,
+                assignToId:
+                  strategy === 'specific'
+                    ? String(form.get('assignToId'))
+                    : undefined,
+              });
+              e.currentTarget.reset();
+            }}
+            className="space-y-3 border-t border-slate-200 pt-4"
+          >
+            <Field label="Rule name" name="name" required />
+            <Field
+              label="Keywords (comma separated, blank = catch-all)"
+              name="keywords"
+              placeholder="invoice, refund"
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-slate-700">
+                  Channel
+                </span>
+                <select
+                  name="channel"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="">All</option>
+                  <option value="WHATSAPP">WhatsApp</option>
+                  <option value="EMAIL">Email</option>
+                  <option value="SMS">SMS</option>
+                  <option value="LIVE_CHAT">Live chat</option>
+                </select>
+              </label>
+              <Field label="Priority" name="priority" type="number" defaultValue={0} />
+            </div>
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-slate-700">
+                Strategy
+              </span>
+              <select
+                name="strategy"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="specific">Assign to a specific agent</option>
+                <option value="round_robin">Round robin (least busy)</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-slate-700">
+                Agent (for the specific strategy)
+              </span>
+              <select
+                name="assignToId"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                {users.data?.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.firstName} {u.lastName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button type="submit" loading={saveRule.isPending}>
+              Add rule
+            </Button>
+          </form>
+        </div>
+      </Modal>
 
       <Modal open={newOpen} title="New conversation" onClose={() => setNewOpen(false)}>
         <form onSubmit={onNewChat} className="space-y-4">

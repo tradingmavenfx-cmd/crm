@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { MessageStatus } from '@prisma/client';
 import { WhatsappService } from './whatsapp.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RoutingService } from '../routing/routing.service';
 import {
   WHATSAPP_PROVIDER,
   WhatsAppProvider,
@@ -33,6 +34,8 @@ describe('WhatsappService', () => {
     provider = {
       sendText: jest.fn().mockResolvedValue({ externalId: 'wamid.1' }),
       sendTemplate: jest.fn().mockResolvedValue({ externalId: 'wamid.2' }),
+      sendInteractive: jest.fn().mockResolvedValue({ externalId: 'wamid.3' }),
+      sendMedia: jest.fn().mockResolvedValue({ externalId: 'wamid.4' }),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -40,6 +43,7 @@ describe('WhatsappService', () => {
         WhatsappService,
         { provide: PrismaService, useValue: prisma },
         { provide: WHATSAPP_PROVIDER, useValue: provider },
+        { provide: RoutingService, useValue: { autoAssign: jest.fn() } },
       ],
     }).compile();
 

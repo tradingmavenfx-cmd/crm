@@ -2,6 +2,12 @@ export interface AppConfig {
   port: number;
   nodeEnv: string;
   corsOrigin: string;
+  /// Public base URL of this API, used to build tracking and webhook links
+  publicUrl: string;
+  tracking: {
+    // Rewrites links and appends an open pixel to outbound email
+    enabled: boolean;
+  };
   jwt: {
     accessSecret: string;
     accessExpiresIn: string;
@@ -57,6 +63,12 @@ export default (): AppConfig => ({
   port: parseInt(process.env.PORT ?? '4000', 10),
   nodeEnv: process.env.NODE_ENV ?? 'development',
   corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',
+  publicUrl:
+    process.env.PUBLIC_URL ??
+    `http://localhost:${process.env.PORT ?? '4000'}/api`,
+  tracking: {
+    enabled: process.env.EMAIL_TRACKING !== 'false',
+  },
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET ?? 'dev-access-secret',
     accessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN ?? '15m',

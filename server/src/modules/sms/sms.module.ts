@@ -5,8 +5,10 @@ import { SmsController } from './sms.controller';
 import { SMS_PROVIDER } from './providers/sms-provider.interface';
 import { MockSmsProvider } from './providers/mock-sms.provider';
 import { TwilioSmsProvider } from './providers/twilio-sms.provider';
+import { RoutingModule } from '../routing/routing.module';
 
 @Module({
+  imports: [RoutingModule],
   controllers: [SmsController],
   providers: [
     SmsService,

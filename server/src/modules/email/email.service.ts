@@ -6,6 +6,8 @@ import {
   EMAIL_PROVIDER,
   EmailProvider,
 } from './providers/email-provider.interface';
+import { TrackingService } from '../tracking/tracking.service';
+import { RoutingService } from '../routing/routing.service';
 
 export interface InboundEmailDto {
   from: string;
@@ -19,6 +21,8 @@ export class EmailService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(EMAIL_PROVIDER) private readonly provider: EmailProvider,
+    private readonly tracking: TrackingService,
+    private readonly routing: RoutingService,
   ) {}
 
   private async getOrCreateConversation(tenantId: string, email: string) {
@@ -64,13 +68,8 @@ export class EmailService {
 
     const conversation = await this.getOrCreateConversation(tenantId, dto.to);
 
-    const result = await this.provider.send({
-      to: dto.to,
-      subject,
-      html,
-      text,
-    });
-
+    // The message row is created first so open/click links can carry its id;
+    // the provider result is written back once the send succeeds.
     const message = await this.prisma.message.create({
       data: {
         tenantId,
@@ -80,9 +79,29 @@ export class EmailService {
         type: 'email',
         subject,
         body: html ?? text ?? '',
-        externalId: result.externalId,
-        status: MessageStatus.SENT,
+        status: MessageStatus.QUEUED,
       },
+    });
+
+    const trackedHtml = html
+      ? await this.tracking.instrumentHtml(
+          tenantId,
+          message.id,
+          html,
+          dto.campaignId,
+        )
+      : undefined;
+
+    const result = await this.provider.send({
+      to: dto.to,
+      subject,
+      html: trackedHtml,
+      text,
+    });
+
+    await this.prisma.message.update({
+      where: { id: message.id },
+      data: { externalId: result.externalId, status: MessageStatus.SENT },
     });
 
     await this.prisma.conversation.update({
@@ -115,6 +134,14 @@ export class EmailService {
       where: { id: conversation.id },
       data: { lastMessageAt: new Date(), status: 'open' },
     });
+
+    await this.routing.autoAssign(
+      tenantId,
+      conversation.id,
+      Channel.EMAIL,
+      message.body,
+    );
+
     return message;
   }
 

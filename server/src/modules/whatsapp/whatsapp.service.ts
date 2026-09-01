@@ -1,7 +1,12 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Channel, MessageDirection, MessageStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { SendMessageDto } from './dto/send-message.dto';
+import {
+  SendInteractiveDto,
+  SendMediaDto,
+  SendMessageDto,
+} from './dto/send-message.dto';
+import { RoutingService } from '../routing/routing.service';
 import {
   WHATSAPP_PROVIDER,
   WhatsAppProvider,
@@ -14,6 +19,7 @@ export class WhatsappService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(WHATSAPP_PROVIDER) private readonly provider: WhatsAppProvider,
+    private readonly routing: RoutingService,
   ) {}
 
   /** Finds or creates a WhatsApp conversation for a given external phone. */
@@ -71,6 +77,69 @@ export class WhatsappService {
     });
 
     // SLA: record the first agent response time (first outbound after inbound).
+    await this.prisma.conversation.update({
+      where: { id: conversation.id },
+      data: {
+        lastMessageAt: new Date(),
+        firstResponseAt: conversation.firstResponseAt ?? new Date(),
+      },
+    });
+
+    return message;
+  }
+
+  /** Quick-reply buttons or a list message (Cloud API interactive messages). */
+  async sendInteractive(tenantId: string, dto: SendInteractiveDto) {
+    const conversation = await this.getOrCreateConversation(tenantId, dto.to);
+    const result = await this.provider.sendInteractive(dto);
+
+    const message = await this.prisma.message.create({
+      data: {
+        tenantId,
+        conversationId: conversation.id,
+        channel: Channel.WHATSAPP,
+        direction: MessageDirection.OUTBOUND,
+        type: 'interactive',
+        body: dto.body,
+        externalId: result.externalId,
+        status: MessageStatus.SENT,
+        metadata: {
+          interactiveType: dto.type,
+          options: dto.options.map((o) => ({ id: o.id, title: o.title })),
+        },
+      },
+    });
+
+    await this.prisma.conversation.update({
+      where: { id: conversation.id },
+      data: {
+        lastMessageAt: new Date(),
+        firstResponseAt: conversation.firstResponseAt ?? new Date(),
+      },
+    });
+
+    return message;
+  }
+
+  /** Image, video, document or audio, sent by public URL. */
+  async sendMedia(tenantId: string, dto: SendMediaDto) {
+    const conversation = await this.getOrCreateConversation(tenantId, dto.to);
+    const result = await this.provider.sendMedia(dto);
+
+    const message = await this.prisma.message.create({
+      data: {
+        tenantId,
+        conversationId: conversation.id,
+        channel: Channel.WHATSAPP,
+        direction: MessageDirection.OUTBOUND,
+        type: dto.kind,
+        body: dto.caption ?? `[${dto.kind}]`,
+        externalId: result.externalId,
+        status: MessageStatus.SENT,
+        metadata: { url: dto.url, filename: dto.filename },
+      },
+    });
+
     await this.prisma.conversation.update({
       where: { id: conversation.id },
       data: {
@@ -217,22 +286,37 @@ export class WhatsappService {
 
   private async recordInbound(tenantId: string, msg: InboundMessage) {
     const conversation = await this.getOrCreateConversation(tenantId, msg.from);
+
+    // A tap on a quick-reply button or list row arrives as an interactive
+    // payload rather than text; keep the chosen title as the message body.
+    const choice =
+      msg.interactive?.button_reply ?? msg.interactive?.list_reply ?? null;
+    const body = choice?.title ?? msg.text?.body ?? null;
+
     await this.prisma.message.create({
       data: {
         tenantId,
         conversationId: conversation.id,
         channel: Channel.WHATSAPP,
         direction: MessageDirection.INBOUND,
-        type: msg.type ?? 'text',
-        body: msg.text?.body ?? null,
+        type: choice ? 'interactive' : (msg.type ?? 'text'),
+        body,
         externalId: msg.id,
         status: MessageStatus.RECEIVED,
+        metadata: choice ? { selectedId: choice.id } : undefined,
       },
     });
     await this.prisma.conversation.update({
       where: { id: conversation.id },
       data: { lastMessageAt: new Date(), status: 'open' },
     });
+
+    await this.routing.autoAssign(
+      tenantId,
+      conversation.id,
+      Channel.WHATSAPP,
+      body,
+    );
   }
 
   private async updateStatus(status: StatusUpdate) {
@@ -277,11 +361,20 @@ export interface WebhookPayload {
   }[];
 }
 
+interface InteractiveReply {
+  id: string;
+  title: string;
+}
+
 interface InboundMessage {
   id: string;
   from: string;
   type?: string;
   text?: { body?: string };
+  interactive?: {
+    button_reply?: InteractiveReply;
+    list_reply?: InteractiveReply;
+  };
 }
 
 interface StatusUpdate {

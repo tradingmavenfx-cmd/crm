@@ -13,7 +13,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Role } from '@prisma/client';
 import { WhatsappService, WebhookPayload } from './whatsapp.service';
-import { SendMessageDto } from './dto/send-message.dto';
+import {
+  SendInteractiveDto,
+  SendMediaDto,
+  SendMessageDto,
+} from './dto/send-message.dto';
 import { UpdateConversationDto } from './dto/update-conversation.dto';
 import { CreateNoteDto } from './dto/note.dto';
 import {
@@ -61,6 +65,24 @@ export class WhatsappController {
       throw new BadRequestException('Either text or templateName is required');
     }
     return this.whatsapp.send(tenantId, dto);
+  }
+
+  @Post('send/interactive')
+  @Roles(Role.TENANT_ADMIN, Role.MANAGER, Role.SALES_REP, Role.SUPPORT_AGENT)
+  sendInteractive(
+    @CurrentUser('tenantId') tenantId: string,
+    @Body() dto: SendInteractiveDto,
+  ) {
+    return this.whatsapp.sendInteractive(tenantId, dto);
+  }
+
+  @Post('send/media')
+  @Roles(Role.TENANT_ADMIN, Role.MANAGER, Role.SALES_REP, Role.SUPPORT_AGENT)
+  sendMedia(
+    @CurrentUser('tenantId') tenantId: string,
+    @Body() dto: SendMediaDto,
+  ) {
+    return this.whatsapp.sendMedia(tenantId, dto);
   }
 
   @Get('conversations')

@@ -29,4 +29,9 @@ export class SendEmailDto {
   @IsOptional()
   @IsString()
   templateId?: string;
+
+  // Set when the send belongs to a campaign, so clicks roll up to it
+  @IsOptional()
+  @IsString()
+  campaignId?: string;
 }

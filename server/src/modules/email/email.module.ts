@@ -5,8 +5,11 @@ import { EmailController } from './email.controller';
 import { EMAIL_PROVIDER } from './providers/email-provider.interface';
 import { MockEmailProvider } from './providers/mock-email.provider';
 import { SmtpEmailProvider } from './providers/smtp-email.provider';
+import { TrackingModule } from '../tracking/tracking.module';
+import { RoutingModule } from '../routing/routing.module';
 
 @Module({
+  imports: [TrackingModule, RoutingModule],
   controllers: [EmailController],
   providers: [
     EmailService,

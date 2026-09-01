@@ -7,11 +7,15 @@ import {
   EMAIL_PROVIDER,
   EmailProvider,
 } from './providers/email-provider.interface';
+import { TrackingService } from '../tracking/tracking.service';
+import { RoutingService } from '../routing/routing.service';
 
 describe('EmailService', () => {
   let service: EmailService;
   let prisma: any;
   let provider: jest.Mocked<EmailProvider>;
+  let tracking: { instrumentHtml: jest.Mock };
+  let routing: { autoAssign: jest.Mock };
   const tenantId = 'tenant-1';
 
   beforeEach(async () => {
@@ -22,7 +26,10 @@ describe('EmailService', () => {
         update: jest.fn(),
       },
       contact: { findFirst: jest.fn() },
-      message: { create: jest.fn() },
+      message: {
+        create: jest.fn().mockResolvedValue({ id: 'm1' }),
+        update: jest.fn().mockResolvedValue({ id: 'm1' }),
+      },
       emailTemplate: {
         findFirst: jest.fn(),
         findMany: jest.fn(),
@@ -32,12 +39,21 @@ describe('EmailService', () => {
       },
     };
     provider = { send: jest.fn().mockResolvedValue({ externalId: 'smtp-1' }) };
+    // Tracking is exercised in its own spec; here it passes the body through.
+    tracking = {
+      instrumentHtml: jest.fn((_t: string, _m: string, html: string) =>
+        Promise.resolve(html),
+      ),
+    };
+    routing = { autoAssign: jest.fn().mockResolvedValue(null) };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         EmailService,
         { provide: PrismaService, useValue: prisma },
         { provide: EMAIL_PROVIDER, useValue: provider },
+        { provide: TrackingService, useValue: tracking },
+        { provide: RoutingService, useValue: routing },
       ],
     }).compile();
 
@@ -66,12 +82,18 @@ describe('EmailService', () => {
     expect(provider.send).toHaveBeenCalledWith(
       expect.objectContaining({ to: 'Lead@Example.com', subject: 'Hello' }),
     );
+    // The row is created before the send so tracking links can carry its id,
+    // then flipped to SENT once the provider accepts it.
     expect(prisma.message.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         direction: 'OUTBOUND',
         channel: 'EMAIL',
-        status: MessageStatus.SENT,
+        status: MessageStatus.QUEUED,
       }),
+    });
+    expect(prisma.message.update).toHaveBeenCalledWith({
+      where: { id: 'm1' },
+      data: { externalId: 'smtp-1', status: MessageStatus.SENT },
     });
   });
 

@@ -129,7 +129,7 @@ export class InboxService {
     body: string,
   ) {
     const conv = await this.getConversation(tenantId, conversationId);
-    return this.prisma.message.create({
+    const note = await this.prisma.message.create({
       data: {
         tenantId,
         conversationId,
@@ -141,6 +141,87 @@ export class InboxService {
         authorId,
         status: MessageStatus.SENT,
       },
+    });
+
+    const mentioned = await this.recordMentions(
+      tenantId,
+      note.id,
+      body,
+      authorId,
+    );
+    return { ...note, mentioned };
+  }
+
+  /**
+   * Turns "@ada" in a note into Mention rows. Matches on first name, last name
+   * or the local part of the email, so agents can write what feels natural.
+   */
+  private async recordMentions(
+    tenantId: string,
+    messageId: string,
+    body: string,
+    authorId: string,
+  ): Promise<string[]> {
+    const handles = [...body.matchAll(/@([\w.-]+)/g)].map((m) =>
+      m[1].toLowerCase(),
+    );
+    if (!handles.length) return [];
+
+    const users = await this.prisma.user.findMany({
+      where: { tenantId, isActive: true },
+      select: { id: true, firstName: true, lastName: true, email: true },
+    });
+
+    const matched = users.filter((u) => {
+      // Never notify the author about their own note.
+      if (u.id === authorId) return false;
+      const aliases = [
+        u.firstName.toLowerCase(),
+        u.lastName.toLowerCase(),
+        `${u.firstName}${u.lastName}`.toLowerCase(),
+        u.email.split('@')[0].toLowerCase(),
+      ];
+      return handles.some((h) => aliases.includes(h));
+    });
+
+    for (const user of matched) {
+      await this.prisma.mention.upsert({
+        where: { messageId_userId: { messageId, userId: user.id } },
+        update: {},
+        create: { tenantId, messageId, userId: user.id },
+      });
+    }
+
+    return matched.map((u) => u.id);
+  }
+
+  /** Notes where the current user was @mentioned. */
+  listMentions(tenantId: string, userId: string, unreadOnly = false) {
+    return this.prisma.mention.findMany({
+      where: { tenantId, userId, ...(unreadOnly ? { readAt: null } : {}) },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      include: {
+        message: {
+          select: {
+            id: true,
+            body: true,
+            conversationId: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+  }
+
+  async markMentionRead(tenantId: string, userId: string, id: string) {
+    const mention = await this.prisma.mention.findFirst({
+      where: { id, tenantId, userId },
+    });
+    if (!mention) throw new NotFoundException('Mention not found');
+    return this.prisma.mention.update({
+      where: { id },
+      data: { readAt: new Date() },
     });
   }
 }
