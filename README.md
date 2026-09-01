@@ -15,7 +15,10 @@ See [`implementation_plan.md`](./implementation_plan.md) for the full 6-phase ro
 
 ## Build Status
 
-Phases 1 and 2 are complete; **Phase 3 — Intelligence & Automation** is next.
+Phase 1 is complete. **Phase 2 — Communication Hub** has every channel
+plumbed end to end (WhatsApp, email, SMS, voice/IVR, unified inbox); the
+campaign, AI and live-chat/video layers on top of it are still open — see
+[What's left in Phase 2](#whats-left-in-phase-2).
 
 - [x] Monorepo scaffolding
 - [x] NestJS backend foundation (config, Prisma, global guards, Swagger)
@@ -35,7 +38,7 @@ Phases 1 and 2 are complete; **Phase 3 — Intelligence & Automation** is next.
 - [x] Frontend CRUD screens: Contacts, Companies, Deals (pipeline board), Tasks
 - [x] Polish: debounced search, pagination, edit-in-place, contact↔company linking, inline task status
 
-## Phase 2 — Communication Hub
+## Phase 2 — Communication Hub (channels done, layers on top pending)
 
 - [x] WhatsApp Business API backend (provider abstraction: Meta Cloud API + dev mock)
 - [x] Conversations + Messages models (omnichannel-ready — WhatsApp/email/SMS/chat)
@@ -56,8 +59,9 @@ Phases 1 and 2 are complete; **Phase 3 — Intelligence & Automation** is next.
 - [x] Calls and voicemails threaded into the unified inbox
 - [x] IVR builder UI, call log + analytics UI, SMS templates + DND list UI
 
-**Phase 2 is feature-complete** apart from the pieces that depend on Phase 3's AI
-layer and on WebRTC — see "Not built yet" below.
+Every channel can send, receive, thread and land in one inbox. What is built
+is the channel plumbing; the campaign/AI layers that sit on top of it, and two
+further channels, are not — see [What's left in Phase 2](#whats-left-in-phase-2).
 
 ### Channels work without credentials
 
@@ -119,14 +123,28 @@ bulk sends skip opted-out numbers instead of failing the batch, and an inbound
 `POST /api/sms/otp/send` and `/verify` cover OTP verification — only a bcrypt hash
 of the code is stored, codes expire in 5 minutes, and there is a 5-attempt limit.
 
-### Not built yet (deferred to Phase 3+)
+### What's left in Phase 2
 
-The Phase 2 plan also lists work that depends on the Phase 3 AI layer or on
-WebRTC, none of which is implemented: AI voice agent and post-call summaries,
-call sentiment/keyword analysis, speech-to-text transcription (the field is
-stored but never populated automatically), predictive/auto dialer, browser
-softphone, live chat widget, video calling, and social DMs. Call recording is
-stored as a provider URL only — the CRM does not host audio.
+Measured against the full Phase 2 scope in `implementation_plan.md`, roughly
+60% is built. The foundation — sending, receiving, threading and the unified
+inbox for four channels — is done; these are not:
+
+| Plan section | Not built |
+|---|---|
+| 2.1 WhatsApp | Interactive messages (quick-reply buttons, list messages), media messages, chatbot, broadcast campaigns, product catalog/commerce |
+| 2.2 IVR & telephony | Predictive/auto dialer, AI voice agent and post-call summaries, browser softphone (WebRTC), call sentiment and keyword spotting, speech-to-text (the `transcript` field exists but nothing populates it automatically) |
+| 2.3 Email | Open/click tracking, email sequences, bulk campaigns, IMAP/Gmail/Outlook sync, drag-and-drop template builder, AI email writer |
+| 2.4 Live chat | The whole section — no website chat widget |
+| 2.5 Video calling | The whole section |
+| 2.6 Unified inbox | Social DMs, @mentions, auto-assign rules, AI reply suggestions |
+
+Call recording is stored as a provider URL only — the CRM does not host audio.
+
+Most of the remaining work is a campaign/automation layer over channels that
+already work, which is why the Phase 3 workflow engine is a natural next step:
+its triggers ("incoming WhatsApp/email/call", "stage changed") and its actions
+(send on any channel, create a task, assign an owner) both already exist. The
+missed-call automation shipped here is effectively one hardcoded workflow.
 
 ### Verify locally
 
