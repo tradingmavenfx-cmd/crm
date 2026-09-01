@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { NotFoundException } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -39,6 +40,8 @@ describe('ChatService', () => {
         ChatService,
         { provide: PrismaService, useValue: prisma },
         { provide: RoutingService, useValue: routing },
+        // The workflow engine listens for these; nothing here asserts on them.
+        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       ],
     }).compile();
 

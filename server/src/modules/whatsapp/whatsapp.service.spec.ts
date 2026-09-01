@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { MessageStatus } from '@prisma/client';
 import { WhatsappService } from './whatsapp.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -44,6 +45,8 @@ describe('WhatsappService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: WHATSAPP_PROVIDER, useValue: provider },
         { provide: RoutingService, useValue: { autoAssign: jest.fn() } },
+        // The workflow engine listens for these; nothing here asserts on them.
+        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       ],
     }).compile();
 

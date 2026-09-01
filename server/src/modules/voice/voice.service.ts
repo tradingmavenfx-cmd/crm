@@ -15,9 +15,12 @@ import {
   MessageDirection,
   MessageStatus,
   Prisma,
+  WorkflowTrigger,
 } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SmsService } from '../sms/sms.service';
+import { WORKFLOW_EVENT } from '../workflows/workflow-events';
 import {
   IvrAction,
   PlaceCallInput,
@@ -67,6 +70,7 @@ export class VoiceService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly sms: SmsService,
+    private readonly events: EventEmitter2,
     @Inject(VOICE_PROVIDER) private readonly provider: VoiceProvider,
   ) {}
 
@@ -480,6 +484,12 @@ export class VoiceService {
     if (missed && updated.direction === CallDirection.INBOUND) {
       await this.runMissedCallAutomation(updated);
     }
+
+    this.events.emit(WORKFLOW_EVENT, {
+      tenantId,
+      trigger: WorkflowTrigger.CALL_COMPLETED,
+      record: updated as unknown as Record<string, unknown>,
+    });
 
     return updated;
   }

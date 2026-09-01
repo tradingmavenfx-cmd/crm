@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { DealsService } from './deals.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -25,7 +26,11 @@ describe('DealsService', () => {
     };
 
     const moduleRef = await Test.createTestingModule({
-      providers: [DealsService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        DealsService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+      ],
     }).compile();
 
     service = moduleRef.get(DealsService);

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { APP_GUARD } from '@nestjs/core';
 import configuration from './config/configuration';
 import { PrismaModule } from './prisma/prisma.module';
@@ -19,6 +20,7 @@ import { RoutingModule } from './modules/routing/routing.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { SequencesModule } from './modules/sequences/sequences.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { WorkflowsModule } from './modules/workflows/workflows.module';
 import { VoiceModule } from './modules/voice/voice.module';
 import { InboxModule } from './modules/inbox/inbox.module';
 import { HealthController } from './modules/health/health.controller';
@@ -33,6 +35,9 @@ import { RolesGuard } from './common/guards/roles.guard';
     }),
     // Drives scheduled campaigns and the sequence step runner.
     ScheduleModule.forRoot(),
+    // Carries domain events to the workflow engine, so the modules that emit
+    // them never have to depend on it.
+    EventEmitterModule.forRoot(),
     PrismaModule,
     AuthModule,
     UsersModule,
@@ -50,6 +55,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     CampaignsModule,
     SequencesModule,
     ChatModule,
+    WorkflowsModule,
     InboxModule,
   ],
   controllers: [HealthController],

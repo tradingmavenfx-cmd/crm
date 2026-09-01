@@ -16,9 +16,9 @@ See [`implementation_plan.md`](./implementation_plan.md) for the full 6-phase ro
 ## Build Status
 
 Phases 1 and 2 are complete, apart from the Phase 2 features that depend on an
-LLM or on WebRTC — those move to Phase 3 alongside the rest of the AI work. See
-[What's left in Phase 2](#whats-left-in-phase-2). **Phase 3 — Intelligence &
-Automation** is next.
+LLM or on WebRTC — those moved to Phase 3 alongside the rest of the AI work.
+**Phase 3 — Intelligence & Automation** is in progress: the workflow automation
+engine (3.2) is built; analytics/BI (3.3) and the AI engine (3.1) are not.
 
 - [x] Monorepo scaffolding
 - [x] NestJS backend foundation (config, Prisma, global guards, Swagger)
@@ -192,10 +192,62 @@ is deferred to Phase 3 where the AI work lives:
 Call recording is stored as a provider URL only — the CRM does not host audio.
 The `transcript` field on a call exists but nothing populates it automatically.
 
-Phase 3's workflow engine is the natural next step: its triggers ("incoming
-WhatsApp/email/call", "stage changed") and its actions (send on any channel,
-create a task, assign an owner) already exist here. The missed-call automation
-and the assignment rules are effectively two hardcoded workflows.
+The workflow engine that now sits on top of these channels is described under
+[Phase 3](#phase-3--intelligence--automation-in-progress).
+
+## Phase 3 — Intelligence & Automation (in progress)
+
+- [x] 3.2 Workflow automation engine — triggers, conditions, actions, run
+      history, analytics and templates
+- [ ] 3.3 Advanced analytics & BI (dashboards, reports, scheduled exports)
+- [ ] 3.1 AI/agentic intelligence (lead scoring, win/loss prediction, sales
+      coach, agents, sentiment, RAG chatbot, natural-language queries) — needs
+      an LLM provider
+
+### Workflow automation engine
+
+Workflows are *when → only if → then*. They generalise the automations that were
+previously hardcoded: the missed-call follow-up and the inbox assignment rules
+are each one workflow's worth of behaviour.
+
+**Triggers** — a record is created or updated (`contact`, `deal`), a specific
+field changes, a deal moves stage, a message arrives on any channel, a call
+ends, a schedule fires (`{ dailyAt: "09:00" }` or `{ everyMinutes: 30 }`), or an
+inbound webhook is posted to
+`POST /api/workflows/webhook/:tenantId/:key`.
+
+**Conditions** — a nestable tree evaluated against the triggering record:
+
+```json
+{ "all": [ { "field": "score", "op": "gte", "value": 80 },
+           { "any": [ { "field": "company.industry", "op": "eq", "value": "Retail" },
+                      { "field": "email", "op": "is_not_empty" } ] } ] }
+```
+
+Operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `contains`, `not_contains`,
+`is_empty`, `is_not_empty`, `in`. Ordering operators compare numerically, and
+paths may be nested (`company.industry`). An empty tree always matches.
+
+**Actions** — send an email/SMS/WhatsApp template, create a task or activity,
+assign an owner (a named agent or round-robin to whoever has the fewest open
+tasks), update a field, enrol the contact into a sequence, or call an outbound
+webhook. String values take `{{field}}` merge values from the record.
+
+Every run is recorded: `SUCCESS`, `FAILED` (with the failing step, which stops
+the chain) or `SKIPPED` when the conditions did not match. `GET
+/api/workflows/analytics` reports volume, success rate and duration per
+workflow, and `POST /api/workflows/:id/test` dry-runs a record through the
+conditions and shows the rendered actions without touching anything.
+
+Six templates ship as starting points — lead assignment, hot-lead alert, deal
+stage automation, customer onboarding, support escalation, renewal reminder.
+Installing one creates it **paused** so it can be reviewed before it fires. (The
+plan's "50+ templates" is a content exercise; these six cover the patterns it
+names.)
+
+Channels emit domain events through an event emitter rather than calling the
+engine, so no channel module depends on it and a workflow failure can never
+break an inbound message.
 
 ### Verify locally
 
@@ -243,7 +295,8 @@ rules), `/contacts`, `/companies`, `/deals`, `/tasks`, `/calls` (call log,
 analytics, click-to-call), `/campaigns` (campaigns + email analytics),
 `/sequences` (drip builder and enrolments), `/live-chat` (visitors, ratings,
 widget snippet), `/ivr-flows` (IVR menu builder), `/email-templates`,
-`/sms-templates` (templates plus the DND list).
+`/sms-templates` (templates plus the DND list), `/workflows` (builder, run
+history and automation analytics).
 
 ## Run the whole stack with Docker (recommended)
 

@@ -6,12 +6,19 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Channel, MessageDirection, MessageStatus } from '@prisma/client';
+import {
+  Channel,
+  MessageDirection,
+  MessageStatus,
+  WorkflowTrigger,
+} from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SendBulkSmsDto, SendSmsDto } from './dto/send-sms.dto';
 import { SMS_PROVIDER, SmsProvider } from './providers/sms-provider.interface';
 import { RoutingService } from '../routing/routing.service';
+import { WORKFLOW_EVENT } from '../workflows/workflow-events';
 
 export interface InboundSmsDto {
   from: string;
@@ -46,6 +53,7 @@ export class SmsService {
     private readonly prisma: PrismaService,
     @Inject(SMS_PROVIDER) private readonly provider: SmsProvider,
     private readonly routing: RoutingService,
+    private readonly events: EventEmitter2,
   ) {}
 
   /** Strips spaces/dashes so the same number always maps to one conversation. */
@@ -255,6 +263,17 @@ export class SmsService {
       Channel.SMS,
       message.body,
     );
+
+    this.events.emit(WORKFLOW_EVENT, {
+      tenantId,
+      trigger: WorkflowTrigger.MESSAGE_RECEIVED,
+      channel: Channel.SMS,
+      record: {
+        ...message,
+        externalId: conversation.externalId,
+        contactId: conversation.contactId,
+      } as unknown as Record<string, unknown>,
+    });
 
     return message;
   }

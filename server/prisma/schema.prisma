@@ -52,6 +52,8 @@ model Tenant {
   chatVisitors       ChatVisitor[]
   mentions           Mention[]
   assignmentRules    AssignmentRule[]
+  workflows          Workflow[]
+  workflowRuns       WorkflowRun[]
 
   @@map("tenants")
 }
@@ -98,6 +100,7 @@ model User {
   createdCampaigns      Campaign[]       @relation("CampaignCreator")
   mentions              Mention[]        @relation("MentionedUser")
   assignmentRules       AssignmentRule[] @relation("RuleAssignee")
+  createdWorkflows      Workflow[]       @relation("WorkflowCreator")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -784,4 +787,85 @@ model AssignmentRule {
 
   @@index([tenantId, isActive, priority])
   @@map("assignment_rules")
+}
+
+// -----------------------------------------------------------
+// Workflow automation engine (Phase 3.2)
+// -----------------------------------------------------------
+
+enum WorkflowTrigger {
+  RECORD_CREATED
+  RECORD_UPDATED
+  FIELD_CHANGED
+  DEAL_STAGE_CHANGED
+  MESSAGE_RECEIVED
+  CALL_COMPLETED
+  SCHEDULE
+  WEBHOOK
+}
+
+enum WorkflowRunStatus {
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
+model Workflow {
+  id          String          @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  isActive    Boolean         @default(true)
+  trigger     WorkflowTrigger
+
+  /// Which record type a record trigger watches: contact | company | deal | task
+  triggerEntity String?
+  /// Trigger detail, by trigger type:
+  ///   FIELD_CHANGED   { field, to? }
+  ///   MESSAGE_RECEIVED{ channel? }
+  ///   SCHEDULE        { everyMinutes } or { dailyAt: "09:00" }
+  ///   WEBHOOK         { key }
+  triggerConfig Json    @default("{}")
+
+  /// Condition tree: { all: [...] } / { any: [...] }, leaves { field, op, value }
+  conditions Json @default("{}")
+  /// Ordered steps: [{ type, config }]
+  actions    Json @default("[]")
+
+  runCount  Int       @default(0)
+  lastRunAt DateTime?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User?         @relation("WorkflowCreator", fields: [createdById], references: [id])
+  runs      WorkflowRun[]
+
+  @@index([tenantId, isActive, trigger])
+  @@map("workflows")
+}
+
+model WorkflowRun {
+  id         String            @id @default(uuid())
+  tenantId   String
+  workflowId String
+  status     WorkflowRunStatus
+
+  /// The event that fired the workflow
+  triggerPayload Json
+  /// Per-action outcome: [{ type, status, detail }]
+  steps          Json     @default("[]")
+  /// Why the run was skipped (conditions not met) or how it failed
+  message        String?
+  durationMs     Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, workflowId, createdAt])
+  @@index([tenantId, status])
+  @@map("workflow_runs")
 }

@@ -4,14 +4,20 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { WorkflowTrigger } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { WORKFLOW_EVENT } from '../workflows/workflow-events';
 import { CreateDealDto } from './dto/create-deal.dto';
 import { UpdateDealDto } from './dto/update-deal.dto';
 import { CreateStageDto } from './dto/create-stage.dto';
 
 @Injectable()
 export class DealsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: EventEmitter2,
+  ) {}
 
   // ── Pipeline stages ──────────────────────────
   createStage(tenantId: string, dto: CreateStageDto) {
@@ -44,7 +50,7 @@ export class DealsService {
   // ── Deals ────────────────────────────────────
   async create(tenantId: string, dto: CreateDealDto) {
     await this.assertStage(tenantId, dto.stageId);
-    return this.prisma.deal.create({
+    const deal = await this.prisma.deal.create({
       data: {
         tenantId,
         title: dto.title,
@@ -59,6 +65,15 @@ export class DealsService {
         status: dto.status ?? 'open',
       },
     });
+
+    this.events.emit(WORKFLOW_EVENT, {
+      tenantId,
+      trigger: WorkflowTrigger.RECORD_CREATED,
+      entity: 'deal',
+      record: deal as unknown as Record<string, unknown>,
+    });
+
+    return deal;
   }
 
   findAll(tenantId: string) {
@@ -79,11 +94,11 @@ export class DealsService {
   }
 
   async update(tenantId: string, id: string, dto: UpdateDealDto) {
-    await this.findOne(tenantId, id);
+    const before = await this.findOne(tenantId, id);
     if (dto.stageId) {
       await this.assertStage(tenantId, dto.stageId);
     }
-    return this.prisma.deal.update({
+    const deal = await this.prisma.deal.update({
       where: { id },
       data: {
         ...dto,
@@ -94,6 +109,40 @@ export class DealsService {
             : undefined,
       },
     });
+
+    const record = deal as unknown as Record<string, unknown>;
+    this.events.emit(WORKFLOW_EVENT, {
+      tenantId,
+      trigger: WorkflowTrigger.RECORD_UPDATED,
+      entity: 'deal',
+      record,
+    });
+
+    // Moving a deal along the pipeline is the trigger people actually build on,
+    // so it gets its own event as well as the generic field-changed one.
+    if (dto.stageId && dto.stageId !== before.stageId) {
+      this.events.emit(WORKFLOW_EVENT, {
+        tenantId,
+        trigger: WorkflowTrigger.DEAL_STAGE_CHANGED,
+        entity: 'deal',
+        record,
+        changed: { field: 'stageId', from: before.stageId, to: dto.stageId },
+      });
+    }
+
+    for (const [field, to] of Object.entries(dto)) {
+      const from = (before as unknown as Record<string, unknown>)[field];
+      if (to === undefined || String(from) === String(to)) continue;
+      this.events.emit(WORKFLOW_EVENT, {
+        tenantId,
+        trigger: WorkflowTrigger.FIELD_CHANGED,
+        entity: 'deal',
+        record,
+        changed: { field, from, to },
+      });
+    }
+
+    return deal;
   }
 
   async remove(tenantId: string, id: string) {

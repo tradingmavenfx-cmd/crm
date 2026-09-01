@@ -269,6 +269,37 @@ async function seedTelephonyAndSms(tenantId: string): Promise<void> {
     });
   }
 
+  const workflowCount = await prisma.workflow.count({ where: { tenantId } });
+  if (workflowCount === 0) {
+    await prisma.workflow.create({
+      data: {
+        tenantId,
+        name: 'Escalate urgent messages',
+        description:
+          'Any inbound message mentioning urgent or complaint raises a high-priority callback task.',
+        trigger: 'MESSAGE_RECEIVED',
+        triggerConfig: {},
+        conditions: {
+          any: [
+            { field: 'body', op: 'contains', value: 'urgent' },
+            { field: 'body', op: 'contains', value: 'complaint' },
+          ],
+        },
+        actions: [
+          {
+            type: 'create_task',
+            config: {
+              title: 'Escalation from {{externalId}}',
+              description: 'Message: {{body}}',
+              priority: 'high',
+              dueInHours: 2,
+            },
+          },
+        ],
+      },
+    });
+  }
+
   const templateCount = await prisma.smsTemplate.count({ where: { tenantId } });
   if (templateCount === 0) {
     await prisma.smsTemplate.createMany({

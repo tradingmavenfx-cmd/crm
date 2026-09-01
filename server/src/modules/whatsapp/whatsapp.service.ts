@@ -1,5 +1,11 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Channel, MessageDirection, MessageStatus } from '@prisma/client';
+import {
+  Channel,
+  MessageDirection,
+  MessageStatus,
+  WorkflowTrigger,
+} from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   SendInteractiveDto,
@@ -7,6 +13,7 @@ import {
   SendMessageDto,
 } from './dto/send-message.dto';
 import { RoutingService } from '../routing/routing.service';
+import { WORKFLOW_EVENT } from '../workflows/workflow-events';
 import {
   WHATSAPP_PROVIDER,
   WhatsAppProvider,
@@ -20,6 +27,7 @@ export class WhatsappService {
     private readonly prisma: PrismaService,
     @Inject(WHATSAPP_PROVIDER) private readonly provider: WhatsAppProvider,
     private readonly routing: RoutingService,
+    private readonly events: EventEmitter2,
   ) {}
 
   /** Finds or creates a WhatsApp conversation for a given external phone. */
@@ -317,6 +325,18 @@ export class WhatsappService {
       Channel.WHATSAPP,
       body,
     );
+
+    this.events.emit(WORKFLOW_EVENT, {
+      tenantId,
+      trigger: WorkflowTrigger.MESSAGE_RECEIVED,
+      channel: Channel.WHATSAPP,
+      record: {
+        body,
+        externalId: conversation.externalId,
+        contactId: conversation.contactId,
+        conversationId: conversation.id,
+      },
+    });
   }
 
   private async updateStatus(status: StatusUpdate) {

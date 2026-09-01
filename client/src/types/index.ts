@@ -302,3 +302,67 @@ export interface Mention {
     createdAt: string;
   };
 }
+
+export type WorkflowTriggerType =
+  | 'RECORD_CREATED'
+  | 'RECORD_UPDATED'
+  | 'FIELD_CHANGED'
+  | 'DEAL_STAGE_CHANGED'
+  | 'MESSAGE_RECEIVED'
+  | 'CALL_COMPLETED'
+  | 'SCHEDULE'
+  | 'WEBHOOK';
+
+export interface WorkflowAction {
+  type: string;
+  config: Record<string, unknown>;
+}
+
+export interface Workflow {
+  id: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  trigger: WorkflowTriggerType;
+  triggerEntity: string | null;
+  triggerConfig: Record<string, unknown>;
+  conditions: Record<string, unknown>;
+  actions: WorkflowAction[];
+  runCount: number;
+  lastRunAt: string | null;
+  _count?: { runs: number };
+}
+
+export interface WorkflowRun {
+  id: string;
+  status: 'SUCCESS' | 'FAILED' | 'SKIPPED';
+  steps: { type: string; status: 'ok' | 'failed'; detail?: string }[];
+  message: string | null;
+  durationMs: number;
+  createdAt: string;
+}
+
+export interface WorkflowTemplate {
+  id: string;
+  name: string;
+  description: string;
+  trigger: WorkflowTriggerType;
+  triggerEntity?: string;
+  actionCount: number;
+}
+
+export interface WorkflowAnalytics {
+  totalRuns: number;
+  success: number;
+  failed: number;
+  skipped: number;
+  successRate: number;
+  avgDurationMs: number;
+  activeWorkflows: number;
+  byWorkflow: {
+    workflowId: string;
+    name: string;
+    runs: number;
+    avgDurationMs: number;
+  }[];
+}

@@ -1,16 +1,21 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Prisma, WorkflowTrigger } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { WORKFLOW_EVENT } from '../workflows/workflow-events';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { QueryContactDto } from './dto/query-contact.dto';
 
 @Injectable()
 export class ContactsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: EventEmitter2,
+  ) {}
 
   async create(tenantId: string, dto: CreateContactDto) {
-    return this.prisma.contact.create({
+    const contact = await this.prisma.contact.create({
       data: {
         tenantId,
         firstName: dto.firstName,
@@ -23,6 +28,15 @@ export class ContactsService {
         score: dto.score ?? 0,
       },
     });
+
+    this.events.emit(WORKFLOW_EVENT, {
+      tenantId,
+      trigger: WorkflowTrigger.RECORD_CREATED,
+      entity: 'contact',
+      record: contact as unknown as Record<string, unknown>,
+    });
+
+    return contact;
   }
 
   async findAll(tenantId: string, query: QueryContactDto) {
@@ -66,14 +80,38 @@ export class ContactsService {
   }
 
   async update(tenantId: string, id: string, dto: UpdateContactDto) {
-    await this.findOne(tenantId, id); // tenant-scoped existence check
-    return this.prisma.contact.update({
+    const before = await this.findOne(tenantId, id); // tenant-scoped check
+    const contact = await this.prisma.contact.update({
       where: { id },
       data: {
         ...dto,
         email: dto.email ? dto.email.toLowerCase() : dto.email,
       },
     });
+
+    const record = contact as unknown as Record<string, unknown>;
+    this.events.emit(WORKFLOW_EVENT, {
+      tenantId,
+      trigger: WorkflowTrigger.RECORD_UPDATED,
+      entity: 'contact',
+      record,
+    });
+
+    // One FIELD_CHANGED event per field that actually moved, so a workflow can
+    // watch a single field without re-checking the whole record.
+    for (const [field, to] of Object.entries(dto)) {
+      const from = (before as unknown as Record<string, unknown>)[field];
+      if (to === undefined || String(from) === String(to)) continue;
+      this.events.emit(WORKFLOW_EVENT, {
+        tenantId,
+        trigger: WorkflowTrigger.FIELD_CHANGED,
+        entity: 'contact',
+        record,
+        changed: { field, from, to },
+      });
+    }
+
+    return contact;
   }
 
   async remove(tenantId: string, id: string) {

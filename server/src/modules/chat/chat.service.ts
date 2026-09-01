@@ -1,8 +1,15 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { Channel, MessageDirection, MessageStatus } from '@prisma/client';
+import {
+  Channel,
+  MessageDirection,
+  MessageStatus,
+  WorkflowTrigger,
+} from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RoutingService } from '../routing/routing.service';
+import { WORKFLOW_EVENT } from '../workflows/workflow-events';
 import {
   ChatMessageDto,
   ChatPageViewDto,
@@ -20,6 +27,7 @@ export class ChatService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly routing: RoutingService,
+    private readonly events: EventEmitter2,
   ) {}
 
   private async requireTenant(tenantId: string) {
@@ -166,6 +174,18 @@ export class ChatService {
       Channel.LIVE_CHAT,
       dto.text,
     );
+
+    this.events.emit(WORKFLOW_EVENT, {
+      tenantId,
+      trigger: WorkflowTrigger.MESSAGE_RECEIVED,
+      channel: Channel.LIVE_CHAT,
+      record: {
+        body: dto.text,
+        externalId: visitor.visitorKey,
+        conversationId,
+        page: visitor.currentPage,
+      },
+    });
 
     return { id: message.id, conversationId, createdAt: message.createdAt };
   }

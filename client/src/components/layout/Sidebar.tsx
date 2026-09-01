@@ -11,6 +11,7 @@ const nav = [
   { href: '/deals', label: 'Deals' },
   { href: '/tasks', label: 'Tasks' },
   { href: '/calls', label: 'Calls' },
+  { href: '/workflows', label: 'Workflows' },
   { href: '/campaigns', label: 'Campaigns' },
   { href: '/sequences', label: 'Sequences' },
   { href: '/live-chat', label: 'Live Chat' },

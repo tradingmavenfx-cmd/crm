@@ -1,5 +1,11 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { Channel, MessageDirection, MessageStatus } from '@prisma/client';
+import {
+  Channel,
+  MessageDirection,
+  MessageStatus,
+  WorkflowTrigger,
+} from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SendEmailDto } from './dto/send-email.dto';
 import {
@@ -8,6 +14,7 @@ import {
 } from './providers/email-provider.interface';
 import { TrackingService } from '../tracking/tracking.service';
 import { RoutingService } from '../routing/routing.service';
+import { WORKFLOW_EVENT } from '../workflows/workflow-events';
 
 export interface InboundEmailDto {
   from: string;
@@ -23,6 +30,7 @@ export class EmailService {
     @Inject(EMAIL_PROVIDER) private readonly provider: EmailProvider,
     private readonly tracking: TrackingService,
     private readonly routing: RoutingService,
+    private readonly events: EventEmitter2,
   ) {}
 
   private async getOrCreateConversation(tenantId: string, email: string) {
@@ -141,6 +149,17 @@ export class EmailService {
       Channel.EMAIL,
       message.body,
     );
+
+    this.events.emit(WORKFLOW_EVENT, {
+      tenantId,
+      trigger: WorkflowTrigger.MESSAGE_RECEIVED,
+      channel: Channel.EMAIL,
+      record: {
+        ...message,
+        externalId: conversation.externalId,
+        contactId: conversation.contactId,
+      } as unknown as Record<string, unknown>,
+    });
 
     return message;
   }

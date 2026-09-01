@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ConfigService } from '@nestjs/config';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { CallDirection, CallStatus } from '@prisma/client';
@@ -98,6 +99,8 @@ describe('VoiceService', () => {
           provide: ConfigService,
           useValue: { get: (key: string) => CONFIG[key] },
         },
+        // The workflow engine listens for these; nothing here asserts on them.
+        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       ],
     }).compile();
 
