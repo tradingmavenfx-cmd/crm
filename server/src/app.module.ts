@@ -21,6 +21,7 @@ import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { SequencesModule } from './modules/sequences/sequences.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { WorkflowsModule } from './modules/workflows/workflows.module';
+import { ReportsModule } from './modules/reports/reports.module';
 import { VoiceModule } from './modules/voice/voice.module';
 import { InboxModule } from './modules/inbox/inbox.module';
 import { HealthController } from './modules/health/health.controller';
@@ -56,6 +57,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     SequencesModule,
     ChatModule,
     WorkflowsModule,
+    ReportsModule,
     InboxModule,
   ],
   controllers: [HealthController],

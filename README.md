@@ -17,8 +17,9 @@ See [`implementation_plan.md`](./implementation_plan.md) for the full 6-phase ro
 
 Phases 1 and 2 are complete, apart from the Phase 2 features that depend on an
 LLM or on WebRTC — those moved to Phase 3 alongside the rest of the AI work.
-**Phase 3 — Intelligence & Automation** is in progress: the workflow automation
-engine (3.2) is built; analytics/BI (3.3) and the AI engine (3.1) are not.
+**Phase 3 — Intelligence & Automation** is in progress: the workflow engine
+(3.2) and analytics/BI (3.3) are built; the AI engine (3.1) is not, because it
+needs an LLM provider.
 
 - [x] Monorepo scaffolding
 - [x] NestJS backend foundation (config, Prisma, global guards, Swagger)
@@ -199,7 +200,8 @@ The workflow engine that now sits on top of these channels is described under
 
 - [x] 3.2 Workflow automation engine — triggers, conditions, actions, run
       history, analytics and templates
-- [ ] 3.3 Advanced analytics & BI (dashboards, reports, scheduled exports)
+- [x] 3.3 Analytics & BI — 15 reports across sales/marketing/service/comms,
+      dashboards with role-based visibility, CSV export, scheduled report email
 - [ ] 3.1 AI/agentic intelligence (lead scoring, win/loss prediction, sales
       coach, agents, sentiment, RAG chatbot, natural-language queries) — needs
       an LLM provider
@@ -249,6 +251,45 @@ Channels emit domain events through an event emitter rather than calling the
 engine, so no channel module depends on it and a workflow failure can never
 break an inbound message.
 
+### Analytics & BI
+
+Fifteen reports, all computed live from the CRM's own data — no warehouse, no
+sync job:
+
+| Family | Reports |
+|---|---|
+| Sales | pipeline by stage, weighted revenue forecast, rep leaderboard, win/loss, sales cycle length |
+| Marketing | campaign performance, channel attribution, email performance |
+| Service | first response time & SLA, agent performance, chat satisfaction, task load |
+| Communication | call analytics, omnichannel engagement, message volume by channel |
+
+Every report returns the same shape — columns, rows and headline stats — which
+is what lets any of them be drawn as a bar, line, donut, funnel, table or stat
+tile. `GET /api/reports` lists the catalogue; `GET /api/reports/:key` runs one
+(`?days=` narrows the window); `GET /api/reports/:key/export.csv` downloads it.
+
+Dashboards compose those reports into widgets, each with its own chart type,
+width and parameters. `GET /api/dashboards/:id/render` returns the dashboard
+with every widget's report already computed — and a widget that fails renders
+its error rather than blanking the page. Dashboards can be restricted to
+particular roles; a role that cannot see one gets the same 404 as a dashboard
+that does not exist, so visibility cannot be probed.
+
+`POST /api/report-schedules` emails a report daily, weekly or monthly to a list
+of addresses, as an HTML table that any mail client can render.
+
+**First-response time is measured from the customer's first message**, not from
+the conversation row, and only for threads the customer started. A thread we
+opened has nothing to respond to, and backfilled data can carry a response
+timestamp that precedes its own row — both would otherwise show up as a
+meaningless zero or a negative in the average.
+
+**Not built:** the drag-and-drop dashboard designer (widgets reorder with
+up/down controls), the plan's "20+ chart types" (six cover every report shape
+here), PDF/Excel export (CSV only), and SQL-based custom reports — exposing raw
+SQL to a tenant is a cross-tenant data-leak risk that a report builder should
+solve with whitelisted dimensions instead.
+
 ### Verify locally
 
 ```bash
@@ -296,7 +337,8 @@ analytics, click-to-call), `/campaigns` (campaigns + email analytics),
 `/sequences` (drip builder and enrolments), `/live-chat` (visitors, ratings,
 widget snippet), `/ivr-flows` (IVR menu builder), `/email-templates`,
 `/sms-templates` (templates plus the DND list), `/workflows` (builder, run
-history and automation analytics).
+history and automation analytics), `/reports` (catalogue, charts, CSV export,
+scheduled emails) and `/dashboards` (widget composition).
 
 ## Run the whole stack with Docker (recommended)
 

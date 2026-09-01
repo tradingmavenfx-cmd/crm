@@ -54,6 +54,9 @@ model Tenant {
   assignmentRules    AssignmentRule[]
   workflows          Workflow[]
   workflowRuns       WorkflowRun[]
+  dashboards         Dashboard[]
+  dashboardWidgets   DashboardWidget[]
+  reportSchedules    ReportSchedule[]
 
   @@map("tenants")
 }
@@ -101,6 +104,7 @@ model User {
   mentions              Mention[]        @relation("MentionedUser")
   assignmentRules       AssignmentRule[] @relation("RuleAssignee")
   createdWorkflows      Workflow[]       @relation("WorkflowCreator")
+  createdDashboards     Dashboard[]      @relation("DashboardCreator")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -868,4 +872,80 @@ model WorkflowRun {
   @@index([tenantId, workflowId, createdAt])
   @@index([tenantId, status])
   @@map("workflow_runs")
+}
+
+// -----------------------------------------------------------
+// Analytics & BI (Phase 3.3)
+// -----------------------------------------------------------
+
+model Dashboard {
+  id             String  @id @default(uuid())
+  tenantId       String
+  name           String
+  description    String?
+  /// Shown first when someone opens the dashboards page
+  isDefault      Boolean @default(false)
+  /// Roles allowed to see it. Empty means everyone in the tenant.
+  visibleToRoles Role[]  @default([])
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User?             @relation("DashboardCreator", fields: [createdById], references: [id])
+  widgets   DashboardWidget[]
+
+  @@index([tenantId])
+  @@map("dashboards")
+}
+
+model DashboardWidget {
+  id          String @id @default(uuid())
+  tenantId    String
+  dashboardId String
+  title       String
+  /// Which report feeds this widget, e.g. "sales.pipeline"
+  reportKey   String
+  /// How to draw it: bar | line | donut | funnel | table | stat
+  chart       String @default("bar")
+  /// Report parameters, e.g. { days: 30 }
+  params      Json   @default("{}")
+  /// Order on the dashboard, lowest first
+  position    Int    @default(0)
+  /// half | full
+  width       String @default("half")
+
+  createdAt DateTime @default(now())
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  dashboard Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, dashboardId, position])
+  @@map("dashboard_widgets")
+}
+
+/// Emails a report to a list of addresses on a fixed cadence.
+model ReportSchedule {
+  id         String    @id @default(uuid())
+  tenantId   String
+  name       String
+  reportKey  String
+  /// daily | weekly | monthly
+  frequency  String    @default("weekly")
+  /// Local time of day to send, "HH:MM"
+  sendAt     String    @default("09:00")
+  /// Where to send it
+  recipients String[]
+  params     Json      @default("{}")
+  isActive   Boolean   @default(true)
+  lastSentAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, isActive])
+  @@map("report_schedules")
 }

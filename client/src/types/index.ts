@@ -366,3 +366,57 @@ export interface WorkflowAnalytics {
     avgDurationMs: number;
   }[];
 }
+
+export interface ReportMeta {
+  key: string;
+  name: string;
+  family: string;
+  description: string;
+  charts: string[];
+}
+
+export interface ReportResult {
+  key: string;
+  name: string;
+  columns: { key: string; label: string; type?: 'number' | 'money' | 'text' }[];
+  rows: Record<string, unknown>[];
+  stats?: { label: string; value: string | number }[];
+  generatedAt: string;
+}
+
+export interface DashboardWidget {
+  id: string;
+  title: string;
+  reportKey: string;
+  chart: string;
+  params: Record<string, unknown>;
+  position: number;
+  width: string;
+}
+
+export interface Dashboard {
+  id: string;
+  name: string;
+  description: string | null;
+  isDefault: boolean;
+  visibleToRoles: string[];
+  widgets: DashboardWidget[];
+}
+
+export interface RenderedDashboard extends Omit<Dashboard, 'widgets'> {
+  widgets: (DashboardWidget & {
+    report: ReportResult | null;
+    error: string | null;
+  })[];
+}
+
+export interface ReportSchedule {
+  id: string;
+  name: string;
+  reportKey: string;
+  frequency: string;
+  sendAt: string;
+  recipients: string[];
+  isActive: boolean;
+  lastSentAt: string | null;
+}

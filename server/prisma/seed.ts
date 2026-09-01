@@ -300,6 +300,55 @@ async function seedTelephonyAndSms(tenantId: string): Promise<void> {
     });
   }
 
+  const dashboardCount = await prisma.dashboard.count({ where: { tenantId } });
+  if (dashboardCount === 0) {
+    await prisma.dashboard.create({
+      data: {
+        tenantId,
+        name: 'Sales overview',
+        description: 'Pipeline, forecast and team performance at a glance.',
+        isDefault: true,
+        widgets: {
+          create: [
+            {
+              tenantId,
+              title: 'Pipeline by stage',
+              reportKey: 'sales.pipeline',
+              chart: 'funnel',
+              position: 0,
+              width: 'half',
+            },
+            {
+              tenantId,
+              title: 'Revenue forecast',
+              reportKey: 'sales.forecast',
+              chart: 'bar',
+              position: 1,
+              width: 'half',
+            },
+            {
+              tenantId,
+              title: 'Rep leaderboard',
+              reportKey: 'sales.leaderboard',
+              chart: 'bar',
+              position: 2,
+              width: 'full',
+            },
+            {
+              tenantId,
+              title: 'Omnichannel engagement',
+              reportKey: 'comms.omnichannel',
+              chart: 'line',
+              params: { days: 14 },
+              position: 3,
+              width: 'full',
+            },
+          ],
+        },
+      },
+    });
+  }
+
   const templateCount = await prisma.smsTemplate.count({ where: { tenantId } });
   if (templateCount === 0) {
     await prisma.smsTemplate.createMany({

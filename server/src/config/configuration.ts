@@ -8,6 +8,10 @@ export interface AppConfig {
     // Rewrites links and appends an open pixel to outbound email
     enabled: boolean;
   };
+  reports: {
+    // Target the first-response report measures SLA compliance against
+    slaFirstResponseMinutes: number;
+  };
   jwt: {
     accessSecret: string;
     accessExpiresIn: string;
@@ -68,6 +72,12 @@ export default (): AppConfig => ({
     `http://localhost:${process.env.PORT ?? '4000'}/api`,
   tracking: {
     enabled: process.env.EMAIL_TRACKING !== 'false',
+  },
+  reports: {
+    slaFirstResponseMinutes: parseInt(
+      process.env.SLA_FIRST_RESPONSE_MINUTES ?? '60',
+      10,
+    ),
   },
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET ?? 'dev-access-secret',
