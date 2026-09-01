@@ -68,11 +68,12 @@ describe('AuthService', () => {
     });
 
     expect(result.user.role).toBe(Role.TENANT_ADMIN);
+    expect(result.tenantSlug).toBe('acme');
     expect(result.tokens.accessToken).toBe('signed-token');
     expect(result.tokens.refreshToken).toBe('signed-token');
   });
 
-  it('rejects login with an unknown tenant', async () => {
+  it('rejects login with an unknown tenant, naming the workspace', async () => {
     prisma.tenant.findUnique.mockResolvedValue(null);
 
     await expect(
@@ -81,7 +82,24 @@ describe('AuthService', () => {
         password: 'pw',
         tenantSlug: 'nope',
       }),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    ).rejects.toThrow('Workspace "nope" not found');
+  });
+
+  it('does not leak whether an email exists when the password is wrong', async () => {
+    prisma.tenant.findUnique.mockResolvedValue({
+      id: 't1',
+      isActive: true,
+      slug: 'acme',
+    });
+    prisma.user.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.login({
+        email: 'nobody@acme.com',
+        password: 'pw',
+        tenantSlug: 'acme',
+      }),
+    ).rejects.toThrow('Invalid credentials');
   });
 
   it('rejects login with a wrong password', async () => {
@@ -130,6 +148,7 @@ describe('AuthService', () => {
     });
 
     expect(result.user.id).toBe('u1');
+    expect(result.tenantSlug).toBe('acme');
     expect(result.tokens.accessToken).toBe('signed-token');
   });
 });

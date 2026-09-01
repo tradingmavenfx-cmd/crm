@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { tokenStore } from '@/lib/api';
+import { useAuthStore } from '@/stores/auth.store';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Topbar } from '@/components/layout/Topbar';
 
@@ -12,14 +13,19 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const hydrate = useAuthStore((s) => s.hydrate);
 
   // Redirect happens as a side effect; we NEVER block the shell behind a
   // spinner wall. The layout renders instantly so navigation feels < 1s.
   useEffect(() => {
     if (!tokenStore.getAccess()) {
       router.replace('/login');
+      return;
     }
-  }, [router]);
+    // Restores the workspace slug after a reload, so the topbar can keep
+    // showing it.
+    hydrate();
+  }, [router, hydrate]);
 
   return (
     <div className="flex">

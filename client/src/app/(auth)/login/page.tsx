@@ -1,10 +1,10 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { AxiosError } from 'axios';
-import { useAuthStore } from '@/stores/auth.store';
+import { slugStore, useAuthStore } from '@/stores/auth.store';
 import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 
@@ -13,6 +13,14 @@ export default function LoginPage() {
   const login = useAuthStore((s) => s.login);
   const loading = useAuthStore((s) => s.loading);
   const [error, setError] = useState<string | null>(null);
+  const [slug, setSlug] = useState('');
+
+  // Prefill the workspace used last on this browser - it is the detail people
+  // are most likely to have forgotten. Read after mount to keep SSR output
+  // stable.
+  useEffect(() => {
+    setSlug(slugStore.get() ?? '');
+  }, []);
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -38,7 +46,14 @@ export default function LoginPage() {
         <p className="text-slate-500 text-sm mb-6">Sign in to your workspace</p>
 
         <form onSubmit={onSubmit} className="space-y-4">
-          <Field label="Workspace slug" name="tenantSlug" placeholder="acme" required />
+          <Field
+            label="Workspace slug"
+            name="tenantSlug"
+            placeholder="acme"
+            value={slug}
+            onChange={(e) => setSlug(e.target.value)}
+            required
+          />
           <Field label="Email" name="email" type="email" required />
           <Field label="Password" name="password" type="password" required />
           {error && <p className="text-sm text-red-600">{error}</p>}

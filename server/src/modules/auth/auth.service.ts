@@ -26,6 +26,8 @@ export interface AuthResult {
     role: Role;
     tenantId: string;
   };
+  /** Workspace slug - required to sign in again, so callers must surface it. */
+  tenantSlug: string;
   tokens: AuthTokens;
 }
 
@@ -82,7 +84,9 @@ export class AuthService {
       where: { slug: dto.tenantSlug },
     });
     if (!tenant || !tenant.isActive) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException(
+        `Workspace "${dto.tenantSlug}" not found - check your workspace slug`,
+      );
     }
 
     const user = await this.prisma.user.findUnique({
@@ -147,7 +151,7 @@ export class AuthService {
 
   private async buildAuthResult(
     user: User,
-    _tenantSlug: string,
+    tenantSlug: string,
   ): Promise<AuthResult> {
     const tokens = await this.issueTokens(user);
     await this.persistRefreshToken(user.id, tokens.refreshToken);
@@ -160,6 +164,7 @@ export class AuthService {
         role: user.role,
         tenantId: user.tenantId,
       },
+      tenantSlug,
       tokens,
     };
   }

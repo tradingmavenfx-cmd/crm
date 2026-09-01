@@ -1,6 +1,19 @@
 import { create } from 'zustand';
 import { api, tokenStore } from '@/lib/api';
 
+/**
+ * Signing in needs the workspace slug, so it has to outlive the in-memory
+ * store - otherwise a user who registers can never get back into their own
+ * workspace after a reload or logout.
+ */
+const SLUG_KEY = 'crm_tenant_slug';
+
+export const slugStore = {
+  get: () =>
+    typeof window !== 'undefined' ? localStorage.getItem(SLUG_KEY) : null,
+  set: (slug: string) => localStorage.setItem(SLUG_KEY, slug),
+};
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -12,9 +25,11 @@ export interface AuthUser {
 
 interface AuthState {
   user: AuthUser | null;
+  tenantSlug: string | null;
   loading: boolean;
   login: (email: string, password: string, tenantSlug: string) => Promise<void>;
-  register: (payload: RegisterPayload) => Promise<void>;
+  /** Resolves with the new workspace slug, which the caller must show. */
+  register: (payload: RegisterPayload) => Promise<string>;
   logout: () => Promise<void>;
   hydrate: () => void;
 }
@@ -29,6 +44,7 @@ interface RegisterPayload {
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
+  tenantSlug: null,
   loading: false,
 
   login: async (email, password, tenantSlug) => {
@@ -40,7 +56,8 @@ export const useAuthStore = create<AuthState>((set) => ({
         tenantSlug,
       });
       tokenStore.set(data.tokens.accessToken, data.tokens.refreshToken);
-      set({ user: data.user });
+      slugStore.set(data.tenantSlug);
+      set({ user: data.user, tenantSlug: data.tenantSlug });
     } finally {
       set({ loading: false });
     }
@@ -51,7 +68,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const { data } = await api.post('/auth/register', payload);
       tokenStore.set(data.tokens.accessToken, data.tokens.refreshToken);
-      set({ user: data.user });
+      slugStore.set(data.tenantSlug);
+      set({ user: data.user, tenantSlug: data.tenantSlug });
+      return data.tenantSlug as string;
     } finally {
       set({ loading: false });
     }
@@ -71,7 +90,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     // Token presence is enough to consider the session active on the client;
     // protected API calls will 401 -> refresh -> or redirect if invalid.
     if (tokenStore.getAccess()) {
-      set((s) => ({ ...s }));
+      set((s) => ({ ...s, tenantSlug: s.tenantSlug ?? slugStore.get() }));
     }
   },
 }));
