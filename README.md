@@ -18,8 +18,9 @@ See [`implementation_plan.md`](./implementation_plan.md) for the full 6-phase ro
 Phases 1 and 2 are complete, apart from the Phase 2 features that depend on an
 LLM or on WebRTC — those moved to Phase 3 alongside the rest of the AI work.
 Phase 3 — Intelligence & Automation — is complete. **Phase 4 — Advanced Sales
-& Marketing** is in progress: CPQ (4.1) is built; the rest of Sales Cloud,
-Marketing Cloud (4.2) and Service Cloud (4.3) are not.
+& Marketing** is in progress: CPQ (4.1) and Service Cloud ticketing (4.3) are
+built; the rest of Sales Cloud, the knowledge base and Marketing Cloud (4.2)
+are not.
 
 - [x] Monorepo scaffolding
 - [x] NestJS backend foundation (config, Prisma, global guards, Swagger)
@@ -347,7 +348,9 @@ solve with whitelisted dimensions instead.
       gamification
 - [ ] 4.2 Marketing Cloud — visual email builder, landing pages, social, lead
       management
-- [ ] 4.3 Service Cloud — ticketing, knowledge base, customer portal
+- [x] 4.3 Service Cloud ticketing — multi-channel intake, auto-categorisation,
+      SLA policies with escalation, routing, merge/link, CSAT
+- [ ] 4.3 rest — knowledge base, customer portal
 
 ### CPQ — configure, price, quote
 
@@ -384,6 +387,44 @@ price change must not silently rewrite them. A quote can only be invoiced once.
 
 Numbering is sequential per tenant and year (`Q-2026-0001`, `INV-2026-0001`),
 and sent quotes past their validity date expire on an hourly sweep.
+
+### Service Cloud — ticketing
+
+A ticket can be raised directly, or **from any inbox thread** —
+`POST /api/tickets/from-conversation/:id` carries over the channel, the linked
+contact and the first inbound message as the description. One thread can only
+become one ticket.
+
+**Routing rules do three jobs at once**: they set the category, the priority and
+the owner. The first matching rule wins, matching on keywords in the subject and
+description and optionally on the channel. `load_based` picks the agent with the
+fewest open tickets. Anything set explicitly when raising the ticket beats the
+rule, and a routing failure can never stop a ticket being raised.
+
+**SLA policies** hold first-response and resolution targets per priority. The
+clocks are set when the ticket is created and **reset when the priority
+changes** — a ticket escalated to urgent gets the urgent target, not the one it
+was created with. A sweep every five minutes flags breaches and escalates the
+priority one step, so a missed target reorders the queue rather than sitting
+quietly. Reopening a resolved ticket clears its resolution stamps, so the clock
+stays honest.
+
+**Replies go out on the channel the ticket came from.** A public comment on a
+ticket raised from a WhatsApp thread is delivered over WhatsApp; internal notes
+never leave the CRM. If the channel refuses the reply — a voice thread has no
+text leg — the comment is still recorded rather than lost. The first public
+reply is what stops the first-response clock; an internal note does not.
+
+Duplicates **merge**: comments move to the target and the source closes and
+drops out of the queue, but nothing is deleted, so the history stays auditable.
+Tickets can also be linked as parent and child for work that splits.
+
+When a ticket is resolved, `/csat/:token` opens a one-question survey. It is
+unreachable while the ticket is still open, and accepts exactly one rating.
+
+Ticket data also feeds the reports engine: `service.tickets` and
+`service.ticket_agents` join the catalogue, so ticket load and SLA compliance
+sit on a dashboard next to pipeline and campaign figures.
 
 ### Verify locally
 
@@ -435,8 +476,9 @@ widget snippet), `/ivr-flows` (IVR menu builder), `/email-templates`,
 history and automation analytics), `/reports` (catalogue, charts, CSV export,
 scheduled emails), `/dashboards` (widget composition), `/ai` (lead scores,
 at-risk deals, coaching and plain-English questions), `/quotes` and `/products`
-(catalogue and price books). `/q/[token]` is the customer-facing quote page and
-needs no login.
+(catalogue and price books), and `/tickets` (queue, SLA, routing rules).
+`/q/[token]` and `/csat/[token]` are the customer-facing quote and survey pages
+and need no login.
 
 ## Run the whole stack with Docker (recommended)
 

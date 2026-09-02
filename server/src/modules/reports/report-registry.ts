@@ -93,6 +93,21 @@ export const REPORTS: ReportMeta[] = [
     charts: ['bar', 'table'],
   },
   {
+    key: 'service.tickets',
+    name: 'Ticket queue',
+    family: 'service',
+    description:
+      'Open tickets by priority, with SLA breaches and average resolution time.',
+    charts: ['bar', 'stat', 'table'],
+  },
+  {
+    key: 'service.ticket_agents',
+    name: 'Ticket load per agent',
+    family: 'service',
+    description: 'Open, resolved and breached tickets per assignee.',
+    charts: ['bar', 'table'],
+  },
+  {
     key: 'service.csat',
     name: 'Chat satisfaction',
     family: 'service',

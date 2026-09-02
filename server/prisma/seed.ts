@@ -444,6 +444,58 @@ async function seedTelephonyAndSms(tenantId: string): Promise<void> {
     });
   }
 
+  const slaCount = await prisma.slaPolicy.count({ where: { tenantId } });
+  if (slaCount === 0) {
+    await prisma.slaPolicy.create({
+      data: {
+        tenantId,
+        name: 'Standard support',
+        isDefault: true,
+        // Minutes to first response, by priority
+        firstResponseMinutes: { LOW: 480, MEDIUM: 240, HIGH: 60, URGENT: 30 },
+        // Minutes to resolution
+        resolutionMinutes: { LOW: 5760, MEDIUM: 2880, HIGH: 480, URGENT: 240 },
+      },
+    });
+  }
+
+  const ticketRuleCount = await prisma.ticketRule.count({ where: { tenantId } });
+  if (ticketRuleCount === 0 && rep) {
+    await prisma.ticketRule.create({
+      data: {
+        tenantId,
+        name: 'Billing questions',
+        priority: 0,
+        conditions: { keywords: ['invoice', 'refund', 'billing', 'payment'] },
+        setCategory: 'Billing',
+        setPriority: 'HIGH',
+        strategy: 'specific',
+        assignToId: rep.id,
+      },
+    });
+    await prisma.ticketRule.create({
+      data: {
+        tenantId,
+        name: 'Outages are urgent',
+        priority: 5,
+        conditions: { keywords: ['down', 'outage', 'not working', 'broken'] },
+        setCategory: 'Incident',
+        setPriority: 'URGENT',
+        strategy: 'load_based',
+      },
+    });
+    await prisma.ticketRule.create({
+      data: {
+        tenantId,
+        name: 'Everything else, least busy agent',
+        priority: 100,
+        conditions: {},
+        setCategory: 'General',
+        strategy: 'load_based',
+      },
+    });
+  }
+
   const templateCount = await prisma.smsTemplate.count({ where: { tenantId } });
   if (templateCount === 0) {
     await prisma.smsTemplate.createMany({

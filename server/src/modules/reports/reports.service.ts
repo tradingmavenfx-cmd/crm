@@ -99,6 +99,10 @@ export class ReportsService {
         return this.agentPerformance(tenantId, params);
       case 'service.csat':
         return this.csat(tenantId);
+      case 'service.tickets':
+        return this.ticketQueue(tenantId, params);
+      case 'service.ticket_agents':
+        return this.ticketAgents(tenantId, params);
       case 'comms.calls':
         return this.calls(tenantId, params);
       case 'comms.omnichannel':
@@ -732,6 +736,153 @@ export class ReportsService {
             : '—',
         },
       ],
+    };
+  }
+
+  private async ticketQueue(tenantId: string, params: ReportParams) {
+    const since = this.since(params.days, 90);
+    const tickets = await this.prisma.ticket.findMany({
+      where: { tenantId, mergedIntoId: null, createdAt: { gte: since } },
+      select: {
+        priority: true,
+        status: true,
+        createdAt: true,
+        resolvedAt: true,
+        firstResponseBreached: true,
+        resolutionBreached: true,
+      },
+    });
+
+    const priorities = ['URGENT', 'HIGH', 'MEDIUM', 'LOW'];
+    const open = tickets.filter(
+      (t) => !['RESOLVED', 'CLOSED'].includes(t.status),
+    );
+
+    const rows = priorities.map((priority) => {
+      const inPriority = tickets.filter((t) => t.priority === priority);
+      return {
+        priority,
+        open: inPriority.filter(
+          (t) => !['RESOLVED', 'CLOSED'].includes(t.status),
+        ).length,
+        resolved: inPriority.filter((t) => t.resolvedAt).length,
+        breached: inPriority.filter(
+          (t) => t.firstResponseBreached || t.resolutionBreached,
+        ).length,
+      };
+    });
+
+    const resolved = tickets.filter((t) => t.resolvedAt);
+    const hours = resolved.map(
+      (t) => (t.resolvedAt!.getTime() - t.createdAt.getTime()) / 3600000,
+    );
+    const breached = tickets.filter(
+      (t) => t.firstResponseBreached || t.resolutionBreached,
+    ).length;
+
+    return {
+      columns: [
+        { key: 'priority', label: 'Priority' },
+        { key: 'open', label: 'Open', type: 'number' as const },
+        { key: 'resolved', label: 'Resolved', type: 'number' as const },
+        { key: 'breached', label: 'SLA breached', type: 'number' as const },
+      ],
+      rows,
+      stats: [
+        { label: 'Open tickets', value: open.length },
+        {
+          label: 'SLA compliance',
+          value: tickets.length
+            ? `${Math.round(((tickets.length - breached) / tickets.length) * 100)}%`
+            : '-',
+        },
+        {
+          label: 'Avg resolution',
+          value: hours.length
+            ? `${this.round(hours.reduce((a, b) => a + b, 0) / hours.length)} h`
+            : '-',
+        },
+      ],
+    };
+  }
+
+  private async ticketAgents(tenantId: string, params: ReportParams) {
+    const since = this.since(params.days, 90);
+    const [users, tickets] = await Promise.all([
+      this.prisma.user.findMany({
+        where: { tenantId, isActive: true },
+        select: { id: true, firstName: true, lastName: true },
+      }),
+      this.prisma.ticket.findMany({
+        where: { tenantId, mergedIntoId: null, createdAt: { gte: since } },
+        select: {
+          assigneeId: true,
+          status: true,
+          createdAt: true,
+          resolvedAt: true,
+          firstResponseBreached: true,
+          resolutionBreached: true,
+          csatRating: true,
+        },
+      }),
+    ]);
+
+    const rows = users
+      .map((user) => {
+        const mine = tickets.filter((t) => t.assigneeId === user.id);
+        const resolved = mine.filter((t) => t.resolvedAt);
+        const hours = resolved.map(
+          (t) => (t.resolvedAt!.getTime() - t.createdAt.getTime()) / 3600000,
+        );
+        const rated = mine.filter((t) => t.csatRating !== null);
+
+        return {
+          agent: `${user.firstName} ${user.lastName}`,
+          open: mine.filter((t) => !['RESOLVED', 'CLOSED'].includes(t.status))
+            .length,
+          resolved: resolved.length,
+          breached: mine.filter(
+            (t) => t.firstResponseBreached || t.resolutionBreached,
+          ).length,
+          avgHours: hours.length
+            ? this.round(hours.reduce((a, b) => a + b, 0) / hours.length)
+            : 0,
+          csat: rated.length
+            ? this.round(
+                rated.reduce((s, t) => s + (t.csatRating ?? 0), 0) /
+                  rated.length,
+              )
+            : 0,
+        };
+      })
+      .sort((a, b) => b.open - a.open);
+
+    const unassigned = tickets.filter((t) => !t.assigneeId);
+    if (unassigned.length) {
+      rows.push({
+        agent: 'Unassigned',
+        open: unassigned.filter(
+          (t) => !['RESOLVED', 'CLOSED'].includes(t.status),
+        ).length,
+        resolved: unassigned.filter((t) => t.resolvedAt).length,
+        breached: unassigned.filter(
+          (t) => t.firstResponseBreached || t.resolutionBreached,
+        ).length,
+        avgHours: 0,
+        csat: 0,
+      });
+    }
+
+    return {
+      columns: [
+        { key: 'agent', label: 'Agent' },
+        { key: 'open', label: 'Open', type: 'number' as const },
+        { key: 'resolved', label: 'Resolved', type: 'number' as const },
+        { key: 'breached', label: 'Breached', type: 'number' as const },
+        { key: 'avgHours', label: 'Avg hours', type: 'number' as const },
+        { key: 'csat', label: 'CSAT', type: 'number' as const },
+      ],
+      rows,
     };
   }
 

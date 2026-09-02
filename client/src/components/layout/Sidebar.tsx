@@ -15,6 +15,7 @@ const nav = [
   { href: '/quotes', label: 'Quotes' },
   { href: '/products', label: 'Products' },
   { href: '/tasks', label: 'Tasks' },
+  { href: '/tickets', label: 'Tickets' },
   { href: '/calls', label: 'Calls' },
   { href: '/workflows', label: 'Workflows' },
   { href: '/campaigns', label: 'Campaigns' },

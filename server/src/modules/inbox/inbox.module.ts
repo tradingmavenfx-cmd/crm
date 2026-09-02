@@ -10,5 +10,6 @@ import { SmsModule } from '../sms/sms.module';
   imports: [WhatsappModule, EmailModule, SmsModule, RoutingModule],
   controllers: [InboxController],
   providers: [InboxService],
+  exports: [InboxService],
 })
 export class InboxModule {}

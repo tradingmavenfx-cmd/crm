@@ -7,7 +7,7 @@ import { Channel, WorkflowTrigger } from '@prisma/client';
  */
 export const WORKFLOW_EVENT = 'workflow.trigger';
 
-export type WorkflowEntity = 'contact' | 'company' | 'deal' | 'task';
+export type WorkflowEntity = 'contact' | 'company' | 'deal' | 'task' | 'ticket';
 
 export interface WorkflowEvent {
   tenantId: string;

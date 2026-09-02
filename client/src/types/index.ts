@@ -584,3 +584,81 @@ export interface Invoice {
   issuedAt: string | null;
   quote?: { id: string; number: string } | null;
 }
+
+export type TicketStatusValue =
+  | 'OPEN'
+  | 'PENDING'
+  | 'ON_HOLD'
+  | 'RESOLVED'
+  | 'CLOSED';
+
+export type TicketPriorityValue = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+
+export interface Ticket {
+  id: string;
+  number: string;
+  subject: string;
+  description: string | null;
+  status: TicketStatusValue;
+  priority: TicketPriorityValue;
+  category: string | null;
+  tags: string[];
+  channel: string | null;
+  firstResponseDueAt: string | null;
+  resolutionDueAt: string | null;
+  firstResponseBreached: boolean;
+  resolutionBreached: boolean;
+  csatRating: number | null;
+  csatComment: string | null;
+  createdAt: string;
+  requester?: ConversationContact | null;
+  assignee?: { id: string; firstName: string; lastName: string } | null;
+  _count?: { comments: number; children: number };
+}
+
+export interface TicketComment {
+  id: string;
+  body: string;
+  isInternal: boolean;
+  channel: string | null;
+  createdAt: string;
+}
+
+export interface TicketDetail extends Ticket {
+  comments?: TicketComment[];
+  parent?: { id: string; number: string; subject: string } | null;
+  children?: { id: string; number: string; subject: string; status: string }[];
+  mergedInto?: { id: string; number: string } | null;
+}
+
+export interface TicketStats {
+  total: number;
+  byStatus: Record<string, number>;
+  openByPriority: Record<string, number>;
+  breached: number;
+  slaCompliance: number;
+  avgResolutionHours: number;
+  csatResponses: number;
+  csatAverage: number;
+}
+
+export interface TicketRule {
+  id: string;
+  name: string;
+  isActive: boolean;
+  priority: number;
+  conditions: { keywords?: string[]; channel?: string };
+  setCategory: string | null;
+  setPriority: TicketPriorityValue | null;
+  strategy: string;
+  assignTo?: { id: string; firstName: string; lastName: string } | null;
+}
+
+export interface CsatSurvey {
+  number: string;
+  subject: string;
+  status: string;
+  csatRating: number | null;
+  alreadyRated: boolean;
+  tenant: { name: string };
+}

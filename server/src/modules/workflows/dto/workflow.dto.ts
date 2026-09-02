@@ -65,7 +65,7 @@ export class CreateWorkflowDto {
   trigger!: WorkflowTrigger;
 
   @IsOptional()
-  @IsIn(['contact', 'company', 'deal', 'task'])
+  @IsIn(['contact', 'company', 'deal', 'task', 'ticket'])
   triggerEntity?: string;
 
   @IsOptional()
@@ -101,7 +101,7 @@ export class UpdateWorkflowDto {
   trigger?: WorkflowTrigger;
 
   @IsOptional()
-  @IsIn(['contact', 'company', 'deal', 'task'])
+  @IsIn(['contact', 'company', 'deal', 'task', 'ticket'])
   triggerEntity?: string;
 
   @IsOptional()

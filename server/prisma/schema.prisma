@@ -65,6 +65,11 @@ model Tenant {
   quoteLines         QuoteLine[]
   discountRules      DiscountRule[]
   invoices           Invoice[]
+  tickets            Ticket[]
+  ticketComments     TicketComment[]
+  ticketEvents       TicketEvent[]
+  slaPolicies        SlaPolicy[]
+  ticketRules        TicketRule[]
 
   @@map("tenants")
 }
@@ -115,6 +120,9 @@ model User {
   createdDashboards     Dashboard[]      @relation("DashboardCreator")
   createdQuotes         Quote[]          @relation("QuoteCreator")
   approvedQuotes        Quote[]          @relation("QuoteApprover")
+  assignedTickets       Ticket[]         @relation("TicketAssignee")
+  ticketComments        TicketComment[]  @relation("TicketCommentAuthor")
+  ticketRules           TicketRule[]     @relation("TicketRuleAssignee")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -173,6 +181,7 @@ model Contact {
   campaignRecipients CampaignRecipient[]
   enrollments        SequenceEnrollment[]
   quotes             Quote[]
+  tickets            Ticket[]
 
   @@index([tenantId])
   @@index([tenantId, email])
@@ -342,6 +351,7 @@ model Conversation {
   messages   Message[]
   calls      Call[]
   visitors   ChatVisitor[]
+  tickets    Ticket[]
 
   @@unique([tenantId, channel, externalId])
   @@index([tenantId, channel])
@@ -1239,4 +1249,173 @@ model Invoice {
   @@unique([tenantId, number])
   @@index([tenantId, status])
   @@map("invoices")
+}
+
+// -----------------------------------------------------------
+// Service Cloud - ticketing (Phase 4.3)
+// -----------------------------------------------------------
+
+enum TicketStatus {
+  OPEN
+  PENDING
+  ON_HOLD
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+/// Response and resolution targets, in minutes, keyed by priority.
+model SlaPolicy {
+  id        String  @id @default(uuid())
+  tenantId  String
+  name      String
+  isActive  Boolean @default(true)
+  /// Applied to tickets that name no policy
+  isDefault Boolean @default(false)
+
+  /// { "LOW": 480, "MEDIUM": 240, "HIGH": 60, "URGENT": 30 }
+  firstResponseMinutes Json
+  resolutionMinutes    Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tickets Ticket[]
+
+  @@index([tenantId, isActive])
+  @@map("sla_policies")
+}
+
+/// Categorises, prioritises and routes a new ticket. The first matching rule
+/// wins, so ordering by priority is what makes the set predictable.
+model TicketRule {
+  id       String  @id @default(uuid())
+  tenantId String
+  name     String
+  isActive Boolean @default(true)
+  priority Int     @default(0)
+
+  /// { keywords: ["refund"], channel: "EMAIL" }
+  conditions Json @default("{}")
+
+  setCategory String?
+  setPriority TicketPriority?
+  /// specific | round_robin | load_based
+  strategy    String          @default("specific")
+  assignToId  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignTo User?  @relation("TicketRuleAssignee", fields: [assignToId], references: [id])
+
+  @@index([tenantId, isActive, priority])
+  @@map("ticket_rules")
+}
+
+model Ticket {
+  id          String         @id @default(uuid())
+  tenantId    String
+  /// Human-facing reference, e.g. T-2026-0001
+  number      String
+  subject     String
+  description String?
+  status      TicketStatus   @default(OPEN)
+  priority    TicketPriority @default(MEDIUM)
+  category    String?
+  tags        String[]       @default([])
+
+  /// Where it came from, when it was raised from a conversation or a call
+  channel        Channel?
+  requesterId    String?
+  assigneeId     String?
+  conversationId String?
+  slaPolicyId    String?
+
+  /// SLA clocks, set when the ticket is created from its policy
+  firstResponseDueAt    DateTime?
+  resolutionDueAt       DateTime?
+  firstRespondedAt      DateTime?
+  resolvedAt            DateTime?
+  closedAt              DateTime?
+  firstResponseBreached Boolean   @default(false)
+  resolutionBreached    Boolean   @default(false)
+
+  /// Parent-child: a child tracks part of its parent's work
+  parentId     String?
+  /// Set when this ticket was merged into another; it stops being worked
+  mergedIntoId String?
+
+  /// Post-resolution survey, collected through an unguessable link
+  csatToken   String  @unique
+  csatRating  Int?
+  csatComment String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  requester    Contact?        @relation(fields: [requesterId], references: [id], onDelete: SetNull)
+  assignee     User?           @relation("TicketAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  conversation Conversation?   @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  slaPolicy    SlaPolicy?      @relation(fields: [slaPolicyId], references: [id], onDelete: SetNull)
+  parent       Ticket?         @relation("TicketChildren", fields: [parentId], references: [id], onDelete: SetNull)
+  children     Ticket[]        @relation("TicketChildren")
+  mergedInto   Ticket?         @relation("TicketMerges", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedFrom   Ticket[]        @relation("TicketMerges")
+  comments     TicketComment[]
+  events       TicketEvent[]
+
+  @@unique([tenantId, number])
+  @@index([tenantId, status, priority])
+  @@index([tenantId, assigneeId])
+  @@map("tickets")
+}
+
+model TicketComment {
+  id         String   @id @default(uuid())
+  tenantId   String
+  ticketId   String
+  authorId   String?
+  body       String
+  /// Internal notes are never shown to the requester
+  isInternal Boolean  @default(false)
+  /// Set when the reply also went out on a channel
+  channel    Channel?
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User?  @relation("TicketCommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, ticketId, createdAt])
+  @@map("ticket_comments")
+}
+
+/// Audit trail: who changed what, and when.
+model TicketEvent {
+  id       String  @id @default(uuid())
+  tenantId String
+  ticketId String
+  /// created | status | priority | assigned | merged | linked | sla_breach | csat
+  type     String
+  detail   Json    @default("{}")
+  userId   String?
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, ticketId, createdAt])
+  @@map("ticket_events")
 }

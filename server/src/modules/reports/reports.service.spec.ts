@@ -31,6 +31,7 @@ describe('ReportsService', () => {
       emailEvent: { groupBy: jest.fn().mockResolvedValue([]) },
       call: { findMany: jest.fn().mockResolvedValue([]) },
       task: { findMany: jest.fn().mockResolvedValue([]) },
+      ticket: { findMany: jest.fn().mockResolvedValue([]) },
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -55,7 +56,7 @@ describe('ReportsService', () => {
 
   it('lists every report with its family and chart options', () => {
     const reports = service.listReports();
-    expect(reports.length).toBeGreaterThan(10);
+    expect(reports.length).toBeGreaterThan(15);
     expect(new Set(reports.map((r) => r.family))).toEqual(
       new Set(['sales', 'marketing', 'service', 'communication']),
     );
@@ -277,6 +278,69 @@ describe('ReportsService', () => {
       assignee: 'Unassigned',
       open: 1,
     });
+  });
+
+  it('summarises the ticket queue with SLA compliance', async () => {
+    const created = new Date(Date.now() - 3 * DAY);
+    prisma.ticket.findMany.mockResolvedValue([
+      {
+        priority: 'HIGH',
+        status: 'OPEN',
+        createdAt: created,
+        resolvedAt: null,
+        firstResponseBreached: true,
+        resolutionBreached: false,
+        csatRating: null,
+      },
+      {
+        priority: 'HIGH',
+        status: 'RESOLVED',
+        createdAt: created,
+        resolvedAt: new Date(created.getTime() + 4 * 3600000),
+        firstResponseBreached: false,
+        resolutionBreached: false,
+        csatRating: 5,
+      },
+    ]);
+
+    const report = await service.run(tenantId, 'service.tickets');
+
+    expect(report.rows).toContainEqual({
+      priority: 'HIGH',
+      open: 1,
+      resolved: 1,
+      breached: 1,
+    });
+    expect(report.stats).toContainEqual({ label: 'Open tickets', value: 1 });
+    expect(report.stats).toContainEqual({
+      label: 'SLA compliance',
+      value: '50%',
+    });
+    expect(report.stats).toContainEqual({
+      label: 'Avg resolution',
+      value: '4 h',
+    });
+  });
+
+  it('surfaces unassigned tickets in the agent report', async () => {
+    prisma.user.findMany.mockResolvedValue([
+      { id: 'u1', firstName: 'Sam', lastName: 'Support' },
+    ]);
+    prisma.ticket.findMany.mockResolvedValue([
+      {
+        assigneeId: null,
+        status: 'OPEN',
+        createdAt: new Date(),
+        resolvedAt: null,
+        firstResponseBreached: false,
+        resolutionBreached: false,
+        csatRating: null,
+      },
+    ]);
+
+    const report = await service.run(tenantId, 'service.ticket_agents');
+
+    expect(report.rows.at(-1)).toMatchObject({ agent: 'Unassigned', open: 1 });
   });
 
   // ── Communication ──────────────────────────────
