@@ -16,6 +16,7 @@ const nav = [
   { href: '/products', label: 'Products' },
   { href: '/tasks', label: 'Tasks' },
   { href: '/tickets', label: 'Tickets' },
+  { href: '/kb', label: 'Knowledge Base' },
   { href: '/calls', label: 'Calls' },
   { href: '/workflows', label: 'Workflows' },
   { href: '/campaigns', label: 'Campaigns' },

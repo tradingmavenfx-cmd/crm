@@ -496,6 +496,110 @@ async function seedTelephonyAndSms(tenantId: string): Promise<void> {
     });
   }
 
+  const articleCount = await prisma.article.count({ where: { tenantId } });
+  if (articleCount === 0) {
+    const billing = await prisma.articleCategory.create({
+      data: {
+        tenantId,
+        name: 'Billing',
+        slug: 'billing',
+        description: 'Invoices, payments and refunds',
+        position: 0,
+      },
+    });
+    const gettingStarted = await prisma.articleCategory.create({
+      data: {
+        tenantId,
+        name: 'Getting started',
+        slug: 'getting-started',
+        position: 1,
+      },
+    });
+
+    const publish = async (data: {
+      slug: string;
+      title: string;
+      excerpt: string;
+      body: string;
+      categoryId: string;
+      tags: string[];
+      visibility?: 'PUBLIC' | 'INTERNAL';
+      locale?: string;
+      translationOfId?: string;
+    }) => {
+      const article = await prisma.article.create({
+        data: {
+          tenantId,
+          status: 'PUBLISHED',
+          publishedAt: new Date(),
+          visibility: data.visibility ?? 'PUBLIC',
+          locale: data.locale ?? 'en',
+          ...data,
+        },
+      });
+      // Publishing snapshots version 1, the same as the API does.
+      await prisma.articleVersion.create({
+        data: {
+          tenantId,
+          articleId: article.id,
+          version: 1,
+          title: article.title,
+          body: article.body,
+          note: 'Initial version',
+        },
+      });
+      return article;
+    };
+
+    const refunds = await publish({
+      slug: 'refund-policy',
+      title: 'Refund policy',
+      excerpt: 'How refunds work and how long they take.',
+      body: 'Refunds are processed within 7 working days of approval. The amount returns to the original payment method. For UPI payments the bank may take a further 2-3 days to show the credit.',
+      categoryId: billing.id,
+      tags: ['refund', 'payment', 'billing'],
+    });
+
+    await publish({
+      slug: 'refund-policy-hi',
+      title: 'Refund niti',
+      excerpt: 'Refund kaise hota hai aur kitna samay lagta hai.',
+      body: 'Approval ke 7 kaam ke din ke andar refund process ho jaata hai. Paisa usi payment method mein wapas aata hai.',
+      categoryId: billing.id,
+      tags: ['refund', 'billing'],
+      locale: 'hi',
+      translationOfId: refunds.id,
+    });
+
+    await publish({
+      slug: 'gst-invoices',
+      title: 'GST invoices and HSN codes',
+      excerpt: 'Where to find your GST invoice and what the HSN code means.',
+      body: 'Every invoice carries the HSN or SAC code for each line, along with the GST rate applied. You can add your GSTIN when a quote is converted to an invoice.',
+      categoryId: billing.id,
+      tags: ['gst', 'invoice', 'tax'],
+    });
+
+    await publish({
+      slug: 'connecting-whatsapp',
+      title: 'Connecting your WhatsApp number',
+      excerpt: 'Set up the WhatsApp Business API in a few minutes.',
+      body: 'Add WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID to your environment, then point the Meta webhook at your workspace. Until then messages are logged by the mock provider.',
+      categoryId: gettingStarted.id,
+      tags: ['whatsapp', 'setup', 'channels'],
+    });
+
+    await publish({
+      slug: 'refund-approval-runbook',
+      title: 'Runbook: approving a refund',
+      excerpt: 'Internal steps before promising a refund date.',
+      body: 'Check the invoice status, confirm with finance that the payment settled, then raise the credit note. Never promise a date before finance confirms.',
+      categoryId: billing.id,
+      tags: ['refund', 'runbook'],
+      visibility: 'INTERNAL',
+    });
+  }
+
   const templateCount = await prisma.smsTemplate.count({ where: { tenantId } });
   if (templateCount === 0) {
     await prisma.smsTemplate.createMany({

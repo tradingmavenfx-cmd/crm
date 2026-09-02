@@ -7,9 +7,11 @@ interface ModalProps {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** Roomier dialog, for editors rather than short forms */
+  wide?: boolean;
 }
 
-export function Modal({ open, title, onClose, children }: ModalProps) {
+export function Modal({ open, title, onClose, children, wide }: ModalProps) {
   if (!open) return null;
   return (
     <div
@@ -17,7 +19,9 @@ export function Modal({ open, title, onClose, children }: ModalProps) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg"
+        className={`w-full ${
+          wide ? 'max-h-[90vh] max-w-2xl overflow-y-auto' : 'max-w-md'
+        } rounded-2xl bg-white p-6 shadow-lg`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">

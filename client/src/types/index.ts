@@ -662,3 +662,125 @@ export interface CsatSurvey {
   alreadyRated: boolean;
   tenant: { name: string };
 }
+
+// ── Knowledge base ─────────────────────────────
+
+export type ArticleStatusValue = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+export type ArticleVisibilityValue = 'PUBLIC' | 'INTERNAL';
+
+export interface ArticleCategory {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  position: number;
+  _count?: { articles: number };
+}
+
+export interface Article {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  body: string;
+  status: ArticleStatusValue;
+  visibility: ArticleVisibilityValue;
+  locale: string;
+  tags: string[];
+  version: number;
+  viewCount: number;
+  helpfulCount: number;
+  notHelpfulCount: number;
+  publishedAt: string | null;
+  updatedAt: string;
+  category: { id: string; name: string } | null;
+  author?: { id: string; firstName: string; lastName: string } | null;
+  _count?: { versions: number; translations: number };
+}
+
+export interface ArticleVersionSummary {
+  id: string;
+  version: number;
+  title: string;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface ArticleDetail extends Article {
+  /** True when the working copy has moved on from what the help centre serves */
+  unpublishedChanges: boolean;
+  versions: ArticleVersionSummary[];
+  translations: {
+    id: string;
+    locale: string;
+    title: string;
+    status: ArticleStatusValue;
+  }[];
+  translationOf: { id: string; locale: string; title: string } | null;
+  feedback: { helpful: boolean; comment: string | null; createdAt: string }[];
+}
+
+export interface KbStats {
+  total: number;
+  published: number;
+  drafts: number;
+  internal: number;
+  totalViews: number;
+  mostViewed: { title: string; slug: string; views: number }[];
+  needsWork: {
+    title: string;
+    slug: string;
+    helpful: number;
+    notHelpful: number;
+  }[];
+}
+
+export interface KbSearchAnalytics {
+  totalSearches: number;
+  noResults: number;
+  noResultRate: number;
+  topQueries: { query: string; searches: number; misses: number }[];
+  gaps: { query: string; searches: number; misses: number }[];
+}
+
+export interface KbSuggestion {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  visibility: ArticleVisibilityValue;
+  category: { id: string; name: string } | null;
+  score: number;
+}
+
+/** A search result on the public help centre */
+export interface HelpResult {
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  locale: string;
+  tags: string[];
+  category: { id: string; name: string } | null;
+  helpfulCount: number;
+}
+
+export interface HelpCentre {
+  tenant: { name: string };
+  query: string | null;
+  results: HelpResult[];
+}
+
+export interface HelpArticle {
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  body: string;
+  locale: string;
+  tags: string[];
+  category: { id: string; name: string } | null;
+  tenant: { name: string };
+  translations: { slug: string; locale: string; title: string }[];
+  helpfulCount: number;
+  notHelpfulCount: number;
+  updatedAt: string;
+}
