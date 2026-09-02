@@ -7,6 +7,7 @@ import {
   AssignmentRule,
   CannedResponse,
   Conversation,
+  AiSuggestion,
   Mention,
   Message,
   TenantUser,
@@ -234,6 +235,14 @@ export default function InboxPage() {
       setNewOpen(false);
       if (created?.conversationId) setSelectedId(created.conversationId);
     },
+  });
+
+  // Drafts a reply into the composer; sending stays a deliberate click.
+  const suggest = useMutation({
+    mutationFn: async (id: string) =>
+      (await api.post<AiSuggestion>(`/ai/suggest-reply/conversation/${id}`))
+        .data,
+    onSuccess: (data) => setComposer(data.reply),
   });
 
   const callBack = useMutation({
@@ -500,6 +509,15 @@ export default function InboxPage() {
                     }
                     className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
                   />
+                  <button
+                    type="button"
+                    onClick={() => suggest.mutate(selected.id)}
+                    disabled={suggest.isPending}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                    title="Draft a reply with AI - review before sending"
+                  >
+                    {suggest.isPending ? '…' : 'Draft'}
+                  </button>
                   <button
                     type="button"
                     onClick={async () => {

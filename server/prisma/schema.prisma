@@ -57,6 +57,7 @@ model Tenant {
   dashboards         Dashboard[]
   dashboardWidgets   DashboardWidget[]
   reportSchedules    ReportSchedule[]
+  aiInsights         AiInsight[]
 
   @@map("tenants")
 }
@@ -948,4 +949,48 @@ model ReportSchedule {
 
   @@index([tenantId, isActive])
   @@map("report_schedules")
+}
+
+// -----------------------------------------------------------
+// AI intelligence (Phase 3.1)
+// -----------------------------------------------------------
+
+enum InsightType {
+  LEAD_SCORE
+  DEAL_RISK
+  NEXT_ACTION
+  SENTIMENT
+}
+
+/// The latest AI judgement about one record. Scores are always explainable:
+/// `factors` carries the signals that moved the number, so a rep can see why.
+model AiInsight {
+  id       String      @id @default(uuid())
+  tenantId String
+  type     InsightType
+
+  /// contact | deal | conversation
+  entityType String
+  entityId   String
+
+  /// 0-100 for scores and probabilities; -100..100 for sentiment
+  score   Float?
+  /// hot | warm | cold | at_risk | healthy | positive | neutral | negative
+  label   String?
+  /// One or two sentences a person can act on
+  summary String
+  /// [{ label, impact, detail }] - impact is the points contributed
+  factors Json    @default("[]")
+
+  /// Which provider produced it: mock | openai
+  source String
+  model  String?
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, entityType, entityId, type])
+  @@index([tenantId, type, createdAt])
+  @@map("ai_insights")
 }

@@ -12,6 +12,15 @@ export interface AppConfig {
     // Target the first-response report measures SLA compliance against
     slaFirstResponseMinutes: number;
   };
+  ai: {
+    // When false (no API key), the mock provider explains the same computed
+    // scores without calling a model.
+    enabled: boolean;
+    apiKey: string;
+    model: string;
+    // Override for an OpenAI-compatible endpoint
+    baseUrl: string;
+  };
   jwt: {
     accessSecret: string;
     accessExpiresIn: string;
@@ -78,6 +87,12 @@ export default (): AppConfig => ({
       process.env.SLA_FIRST_RESPONSE_MINUTES ?? '60',
       10,
     ),
+  },
+  ai: {
+    enabled: Boolean(process.env.OPENAI_API_KEY),
+    apiKey: process.env.OPENAI_API_KEY ?? '',
+    model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
+    baseUrl: process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1',
   },
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET ?? 'dev-access-secret',

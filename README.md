@@ -17,9 +17,9 @@ See [`implementation_plan.md`](./implementation_plan.md) for the full 6-phase ro
 
 Phases 1 and 2 are complete, apart from the Phase 2 features that depend on an
 LLM or on WebRTC — those moved to Phase 3 alongside the rest of the AI work.
-**Phase 3 — Intelligence & Automation** is in progress: the workflow engine
-(3.2) and analytics/BI (3.3) are built; the AI engine (3.1) is not, because it
-needs an LLM provider.
+**Phase 3 — Intelligence & Automation** is complete: the AI engine (3.1), the
+workflow engine (3.2) and analytics/BI (3.3) are all built. **Phase 4 —
+Advanced Sales & Marketing** is next.
 
 - [x] Monorepo scaffolding
 - [x] NestJS backend foundation (config, Prisma, global guards, Swagger)
@@ -196,15 +196,64 @@ The `transcript` field on a call exists but nothing populates it automatically.
 The workflow engine that now sits on top of these channels is described under
 [Phase 3](#phase-3--intelligence--automation-in-progress).
 
-## Phase 3 — Intelligence & Automation (in progress)
+## Phase 3 — Intelligence & Automation
 
 - [x] 3.2 Workflow automation engine — triggers, conditions, actions, run
       history, analytics and templates
 - [x] 3.3 Analytics & BI — 15 reports across sales/marketing/service/comms,
       dashboards with role-based visibility, CSV export, scheduled report email
-- [ ] 3.1 AI/agentic intelligence (lead scoring, win/loss prediction, sales
-      coach, agents, sentiment, RAG chatbot, natural-language queries) — needs
-      an LLM provider
+- [x] 3.1 AI intelligence — explainable lead scoring, deal win/loss
+      prediction, sales coach, sentiment, reply drafting, research and
+      data-entry assistants, natural-language queries
+
+### AI intelligence
+
+**The numbers come from your data; the model only writes the explanation.**
+Lead scores and win probabilities are computed deterministically from CRM
+history — replies received, calls answered, email opens, open deal value,
+seniority in the job title, and how long since the contact last responded. Each
+score carries the factors that produced it, so a rep can see exactly why a lead
+is hot and a manager can defend it. The figures are byte-identical with or
+without an AI provider configured; only the prose changes.
+
+That split is also the safety property: a model that returns a different number
+cannot overwrite the computed one, and a model that is down or returns garbage
+degrades to the built-in summary instead of failing the request.
+
+| Endpoint | What it does |
+|---|---|
+| `POST /api/ai/score/contact/:id` | Explainable lead score, written back to the contact |
+| `GET /api/ai/scoreboard` | Latest score per contact, hottest first |
+| `POST /api/ai/predict/deal/:id` | Win probability from stage plus momentum |
+| `GET /api/ai/deals/at-risk` | Open deals that are slipping, worst first |
+| `GET /api/ai/coach/contact/:id` | Next best action, the channel they actually reply on, the hour they usually reply in |
+| `POST /api/ai/sentiment/conversation/:id` | Tone of a thread |
+| `POST /api/ai/suggest-reply/conversation/:id` | A **draft** for the agent — nothing is ever sent automatically |
+| `POST /api/ai/extract/conversation/:id` | Structured fields from a thread, **not applied** until a person accepts them |
+| `GET /api/ai/research/contact/:id` | Everything the CRM knows, summarised before a meeting |
+| `POST /api/ai/ask` | A question in plain English, answered by running a report |
+
+Natural-language questions never reach the database as a query: the model only
+chooses **which of the 15 reports to run**, and a key it invents is rejected
+before anything executes. That keeps a question from becoming SQL, and keeps it
+inside the tenant.
+
+Lead scores are refreshed nightly, so the board is current without anyone
+opening a page.
+
+**Provider setup.** Set `OPENAI_API_KEY` (and optionally `OPENAI_MODEL`, default
+`gpt-4o-mini`, or `OPENAI_BASE_URL` for an OpenAI-compatible endpoint). Without
+a key the mock provider writes the same explanations from the same computed
+numbers, so every flow works in dev.
+
+> A note on credentials: this needs a **platform API key**. The "sign in with
+> ChatGPT" OAuth flow authorises the Codex CLI on a developer's own machine; it
+> does not authorise a server to call models on a user's behalf, so it cannot
+> back a server-side feature like this one.
+
+**Not built:** the RAG knowledge-base chatbot from the plan, which needs a
+vector store and a document ingestion pipeline — the live-chat widget hands to a
+human today rather than answering from documents.
 
 ### Workflow automation engine
 
@@ -338,7 +387,8 @@ analytics, click-to-call), `/campaigns` (campaigns + email analytics),
 widget snippet), `/ivr-flows` (IVR menu builder), `/email-templates`,
 `/sms-templates` (templates plus the DND list), `/workflows` (builder, run
 history and automation analytics), `/reports` (catalogue, charts, CSV export,
-scheduled emails) and `/dashboards` (widget composition).
+scheduled emails), `/dashboards` (widget composition) and `/ai` (lead scores,
+at-risk deals, coaching and plain-English questions).
 
 ## Run the whole stack with Docker (recommended)
 

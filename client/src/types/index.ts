@@ -420,3 +420,64 @@ export interface ReportSchedule {
   isActive: boolean;
   lastSentAt: string | null;
 }
+
+export interface InsightFactor {
+  label: string;
+  impact: number;
+  detail: string;
+}
+
+export interface AiInsight {
+  id: string;
+  type: string;
+  entityType: string;
+  entityId: string;
+  score: number | null;
+  label: string | null;
+  summary: string;
+  factors: InsightFactor[];
+  source: string;
+  model: string | null;
+  createdAt: string;
+}
+
+export interface ScoreboardRow {
+  contactId: string;
+  name: string;
+  email: string | null;
+  score: number;
+  label: string | null;
+  summary: string;
+  scoredAt: string;
+}
+
+export interface AtRiskDeal {
+  dealId: string;
+  title: string;
+  probability: number;
+  label: string;
+  risks: InsightFactor[];
+}
+
+export interface AiCoaching {
+  action: string;
+  reason: string;
+  bestChannel: string | null;
+  bestHour: number | null;
+  bestTime: string | null;
+}
+
+export interface AiQueryResult {
+  question: string;
+  reportKey: string | null;
+  answer: string;
+  report: ReportResult | null;
+  model: string;
+}
+
+export interface AiSuggestion {
+  reply: string;
+  model: string;
+  source: string;
+  draft: boolean;
+}
