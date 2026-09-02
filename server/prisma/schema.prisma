@@ -58,6 +58,13 @@ model Tenant {
   dashboardWidgets   DashboardWidget[]
   reportSchedules    ReportSchedule[]
   aiInsights         AiInsight[]
+  products           Product[]
+  priceBooks         PriceBook[]
+  priceBookEntries   PriceBookEntry[]
+  quotes             Quote[]
+  quoteLines         QuoteLine[]
+  discountRules      DiscountRule[]
+  invoices           Invoice[]
 
   @@map("tenants")
 }
@@ -106,6 +113,8 @@ model User {
   assignmentRules       AssignmentRule[] @relation("RuleAssignee")
   createdWorkflows      Workflow[]       @relation("WorkflowCreator")
   createdDashboards     Dashboard[]      @relation("DashboardCreator")
+  createdQuotes         Quote[]          @relation("QuoteCreator")
+  approvedQuotes        Quote[]          @relation("QuoteApprover")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -134,6 +143,7 @@ model Company {
   owner    User?     @relation("CompanyOwner", fields: [ownerId], references: [id])
   contacts Contact[]
   deals    Deal[]
+  quotes   Quote[]
 
   @@index([tenantId])
   @@map("companies")
@@ -162,6 +172,7 @@ model Contact {
   calls              Call[]
   campaignRecipients CampaignRecipient[]
   enrollments        SequenceEnrollment[]
+  quotes             Quote[]
 
   @@index([tenantId])
   @@index([tenantId, email])
@@ -205,6 +216,7 @@ model Deal {
   contact    Contact?   @relation(fields: [contactId], references: [id])
   owner      User?      @relation("DealOwner", fields: [ownerId], references: [id])
   activities Activity[]
+  quotes     Quote[]
 
   @@index([tenantId])
   @@index([tenantId, stageId])
@@ -993,4 +1005,238 @@ model AiInsight {
   @@index([tenantId, entityType, entityId, type])
   @@index([tenantId, type, createdAt])
   @@map("ai_insights")
+}
+
+// -----------------------------------------------------------
+// CPQ - products, price books, quotes (Phase 4.1)
+// -----------------------------------------------------------
+
+model Product {
+  id          String  @id @default(uuid())
+  tenantId    String
+  /// Stock-keeping unit, unique inside the tenant
+  sku         String
+  name        String
+  description String?
+
+  /// List price in the tenant's base currency, in major units
+  unitPrice Decimal @db.Decimal(18, 2)
+  currency  String  @default("INR")
+  /// GST rate applied to this product
+  taxRate   Decimal @default(18) @db.Decimal(5, 2)
+  /// Indian HSN (goods) or SAC (services) classification code
+  hsnCode   String?
+  isActive  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  prices PriceBookEntry[]
+  lines  QuoteLine[]
+
+  @@unique([tenantId, sku])
+  @@index([tenantId, isActive])
+  @@map("products")
+}
+
+/// A named set of prices - one per currency or per customer segment.
+model PriceBook {
+  id        String  @id @default(uuid())
+  tenantId  String
+  name      String
+  currency  String  @default("INR")
+  /// Used when a quote does not name one
+  isDefault Boolean @default(false)
+  isActive  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant  Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  entries PriceBookEntry[]
+  quotes  Quote[]
+
+  @@index([tenantId])
+  @@map("price_books")
+}
+
+model PriceBookEntry {
+  id          String  @id @default(uuid())
+  tenantId    String
+  priceBookId String
+  productId   String
+  unitPrice   Decimal @db.Decimal(18, 2)
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  priceBook PriceBook @relation(fields: [priceBookId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([priceBookId, productId])
+  @@index([tenantId])
+  @@map("price_book_entries")
+}
+
+enum QuoteStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  SENT
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+model Quote {
+  id       String      @id @default(uuid())
+  tenantId String
+  /// Human-facing reference, e.g. Q-2026-0001
+  number   String
+  status   QuoteStatus @default(DRAFT)
+
+  dealId      String?
+  contactId   String?
+  companyId   String?
+  priceBookId String?
+
+  currency        String  @default("INR")
+  /// Discount applied to the whole quote, on top of any line discounts
+  discountPercent Decimal @default(0) @db.Decimal(5, 2)
+
+  /// Totals are stored as computed, so a sent quote never changes underfoot
+  subtotal       Decimal @default(0) @db.Decimal(18, 2)
+  discountAmount Decimal @default(0) @db.Decimal(18, 2)
+  taxAmount      Decimal @default(0) @db.Decimal(18, 2)
+  total          Decimal @default(0) @db.Decimal(18, 2)
+
+  validUntil DateTime?
+  notes      String?
+  terms      String?
+
+  /// Unguessable token behind the customer-facing link
+  publicToken String @unique
+
+  sentAt          DateTime?
+  acceptedAt      DateTime?
+  declinedAt      DateTime?
+  /// Who accepted, captured from the public page. An acceptance record, not a
+  /// legally integrated e-signature.
+  acceptedByName  String?
+  acceptedByEmail String?
+  acceptedIp      String?
+  declineReason   String?
+
+  /// Set when the discount exceeded what the creator may approve themselves
+  approvalRequired Boolean   @default(false)
+  approvedById     String?
+  approvedAt       DateTime?
+  rejectionReason  String?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deal       Deal?       @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  contact    Contact?    @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  company    Company?    @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  priceBook  PriceBook?  @relation(fields: [priceBookId], references: [id], onDelete: SetNull)
+  createdBy  User?       @relation("QuoteCreator", fields: [createdById], references: [id])
+  approvedBy User?       @relation("QuoteApprover", fields: [approvedById], references: [id])
+  lines      QuoteLine[]
+  invoices   Invoice[]
+
+  @@unique([tenantId, number])
+  @@index([tenantId, status])
+  @@map("quotes")
+}
+
+model QuoteLine {
+  id        String  @id @default(uuid())
+  tenantId  String
+  quoteId   String
+  /// Null for a free-text line that is not in the catalogue
+  productId String?
+
+  name            String
+  description     String?
+  quantity        Decimal @default(1) @db.Decimal(12, 2)
+  unitPrice       Decimal @db.Decimal(18, 2)
+  /// Discount on this line alone
+  discountPercent Decimal @default(0) @db.Decimal(5, 2)
+  taxRate         Decimal @default(18) @db.Decimal(5, 2)
+  /// Line total after its own discount, before tax
+  lineTotal       Decimal @default(0) @db.Decimal(18, 2)
+  position        Int     @default(0)
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  quote   Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, quoteId, position])
+  @@map("quote_lines")
+}
+
+/// How much discount a role may give before a quote needs approval.
+model DiscountRule {
+  id       String  @id @default(uuid())
+  tenantId String
+  name     String
+  isActive Boolean @default(true)
+  /// Lower runs first; the first rule matching the creator's role wins
+  priority Int     @default(0)
+
+  /// Roles this limit applies to. Empty means everyone.
+  appliesToRoles     Role[]  @default([])
+  /// Discount percent this role may approve without asking
+  maxDiscountPercent Decimal @default(10) @db.Decimal(5, 2)
+  /// Role that must approve anything above the limit
+  approverRole       Role    @default(MANAGER)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, isActive, priority])
+  @@map("discount_rules")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  VOID
+}
+
+/// Raised from an accepted quote; totals are copied, never recomputed.
+model Invoice {
+  id       String        @id @default(uuid())
+  tenantId String
+  number   String
+  status   InvoiceStatus @default(DRAFT)
+  quoteId  String?
+
+  currency       String  @default("INR")
+  subtotal       Decimal @db.Decimal(18, 2)
+  discountAmount Decimal @db.Decimal(18, 2)
+  taxAmount      Decimal @db.Decimal(18, 2)
+  total          Decimal @db.Decimal(18, 2)
+
+  issuedAt      DateTime?
+  dueAt         DateTime?
+  paidAt        DateTime?
+  /// GSTIN of the customer, for a compliant Indian invoice
+  customerGstin String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  quote  Quote? @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, number])
+  @@index([tenantId, status])
+  @@map("invoices")
 }

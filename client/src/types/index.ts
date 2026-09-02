@@ -481,3 +481,106 @@ export interface AiSuggestion {
   source: string;
   draft: boolean;
 }
+
+export interface Product {
+  id: string;
+  sku: string;
+  name: string;
+  description: string | null;
+  unitPrice: string | number;
+  currency: string;
+  taxRate: string | number;
+  hsnCode: string | null;
+  isActive: boolean;
+}
+
+export interface PriceBook {
+  id: string;
+  name: string;
+  currency: string;
+  isDefault: boolean;
+  isActive: boolean;
+  _count?: { entries: number };
+}
+
+export interface QuoteLine {
+  id: string;
+  productId: string | null;
+  name: string;
+  description: string | null;
+  quantity: string | number;
+  unitPrice: string | number;
+  discountPercent: string | number;
+  taxRate: string | number;
+  lineTotal: string | number;
+}
+
+export type QuoteStatusValue =
+  | 'DRAFT'
+  | 'PENDING_APPROVAL'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'SENT'
+  | 'ACCEPTED'
+  | 'DECLINED'
+  | 'EXPIRED';
+
+export interface Quote {
+  id: string;
+  number: string;
+  status: QuoteStatusValue;
+  currency: string;
+  discountPercent: string | number;
+  subtotal: string | number;
+  discountAmount: string | number;
+  taxAmount: string | number;
+  total: string | number;
+  validUntil: string | null;
+  notes: string | null;
+  terms: string | null;
+  approvalRequired: boolean;
+  acceptedByName: string | null;
+  acceptedAt: string | null;
+  acceptedIp: string | null;
+  rejectionReason: string | null;
+  lines?: QuoteLine[];
+  contact?: ConversationContact | null;
+  company?: { id: string; name: string } | null;
+}
+
+/** A line being built in the quote form, before the server prices it. */
+export interface QuoteDraftLine {
+  productId: string;
+  quantity: number;
+  discountPercent: number;
+}
+
+export interface PublicQuote {
+  number: string;
+  status: QuoteStatusValue;
+  currency: string;
+  subtotal: string | number;
+  discountAmount: string | number;
+  taxAmount: string | number;
+  total: string | number;
+  validUntil: string | null;
+  notes: string | null;
+  terms: string | null;
+  expired: boolean;
+  lines: QuoteLine[];
+  tenant: { name: string };
+  contact?: { firstName: string; lastName: string; email: string | null } | null;
+  company?: { name: string } | null;
+}
+
+export interface Invoice {
+  id: string;
+  number: string;
+  status: string;
+  currency: string;
+  subtotal: string | number;
+  total: string | number;
+  customerGstin: string | null;
+  issuedAt: string | null;
+  quote?: { id: string; number: string } | null;
+}

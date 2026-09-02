@@ -17,9 +17,9 @@ See [`implementation_plan.md`](./implementation_plan.md) for the full 6-phase ro
 
 Phases 1 and 2 are complete, apart from the Phase 2 features that depend on an
 LLM or on WebRTC — those moved to Phase 3 alongside the rest of the AI work.
-**Phase 3 — Intelligence & Automation** is complete: the AI engine (3.1), the
-workflow engine (3.2) and analytics/BI (3.3) are all built. **Phase 4 —
-Advanced Sales & Marketing** is next.
+Phase 3 — Intelligence & Automation — is complete. **Phase 4 — Advanced Sales
+& Marketing** is in progress: CPQ (4.1) is built; the rest of Sales Cloud,
+Marketing Cloud (4.2) and Service Cloud (4.3) are not.
 
 - [x] Monorepo scaffolding
 - [x] NestJS backend foundation (config, Prisma, global guards, Swagger)
@@ -339,6 +339,52 @@ here), PDF/Excel export (CSV only), and SQL-based custom reports — exposing ra
 SQL to a tenant is a cross-tenant data-leak risk that a report builder should
 solve with whitelisted dimensions instead.
 
+## Phase 4 — Advanced Sales & Marketing (in progress)
+
+- [x] 4.1 CPQ — product catalogue, price books, quotes with discount approval,
+      customer-facing acceptance, quote-to-invoice
+- [ ] 4.1 rest — AI revenue forecasting, quota management, territories,
+      gamification
+- [ ] 4.2 Marketing Cloud — visual email builder, landing pages, social, lead
+      management
+- [ ] 4.3 Service Cloud — ticketing, knowledge base, customer portal
+
+### CPQ — configure, price, quote
+
+A product carries a list price, a GST rate and an HSN/SAC code. Price books
+layer over that: a quote takes its prices from the book it names, falling back
+to the default book and then the product's own list price. A product that has
+ever been quoted is **deactivated rather than deleted**, because deleting it
+would rewrite what a customer was already sent.
+
+**Money is computed in integer paise**, never floats. A quote whose total is a
+paisa off its own lines is a quote nobody trusts, and `0.1 + 0.2` is not `0.3`.
+Tax is applied per line at that line's own rate, so a quote mixing 5% and 18%
+items breaks out correctly for GST — including when a quote-level discount
+applies, which is spread across the lines rather than taken out of one bucket.
+
+Discount policy is a rule per role: a rep may go to 10%, a manager to 25%, and
+anything beyond that holds the quote at `PENDING_APPROVAL` until the approver
+role signs it off. The check looks at **every** discount, header and line, so a
+40% cut hidden on one line cannot slip past a 0% header. Nobody can approve
+their own quote, and editing an approved quote clears the approval.
+
+Sending a quote publishes it at `/q/:token` — an unguessable token, and the
+token is never echoed back in the payload. A quote that has not been sent 404s
+there, so a draft is not reachable by guessing. The customer sees the quote and
+can accept it: their name, the timestamp and the IP are recorded.
+
+> That acceptance is an **acceptance record, not an integrated e-signature**.
+> A quote is not routed through a signature provider, and nothing here claims
+> the legal weight of one.
+
+An accepted quote converts to an invoice with a GSTIN field, and the totals are
+**copied, not recomputed** — the customer accepted specific figures, and a later
+price change must not silently rewrite them. A quote can only be invoiced once.
+
+Numbering is sequential per tenant and year (`Q-2026-0001`, `INV-2026-0001`),
+and sent quotes past their validity date expire on an hourly sweep.
+
 ### Verify locally
 
 ```bash
@@ -387,8 +433,10 @@ analytics, click-to-call), `/campaigns` (campaigns + email analytics),
 widget snippet), `/ivr-flows` (IVR menu builder), `/email-templates`,
 `/sms-templates` (templates plus the DND list), `/workflows` (builder, run
 history and automation analytics), `/reports` (catalogue, charts, CSV export,
-scheduled emails), `/dashboards` (widget composition) and `/ai` (lead scores,
-at-risk deals, coaching and plain-English questions).
+scheduled emails), `/dashboards` (widget composition), `/ai` (lead scores,
+at-risk deals, coaching and plain-English questions), `/quotes` and `/products`
+(catalogue and price books). `/q/[token]` is the customer-facing quote page and
+needs no login.
 
 ## Run the whole stack with Docker (recommended)
 

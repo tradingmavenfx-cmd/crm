@@ -23,6 +23,7 @@ import { ChatModule } from './modules/chat/chat.module';
 import { WorkflowsModule } from './modules/workflows/workflows.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { AiModule } from './modules/ai/ai.module';
+import { CpqModule } from './modules/cpq/cpq.module';
 import { VoiceModule } from './modules/voice/voice.module';
 import { InboxModule } from './modules/inbox/inbox.module';
 import { HealthController } from './modules/health/health.controller';
@@ -60,6 +61,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     WorkflowsModule,
     ReportsModule,
     AiModule,
+    CpqModule,
     InboxModule,
   ],
   controllers: [HealthController],

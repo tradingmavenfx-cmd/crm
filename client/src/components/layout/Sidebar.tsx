@@ -12,6 +12,8 @@ const nav = [
   { href: '/contacts', label: 'Contacts' },
   { href: '/companies', label: 'Companies' },
   { href: '/deals', label: 'Deals' },
+  { href: '/quotes', label: 'Quotes' },
+  { href: '/products', label: 'Products' },
   { href: '/tasks', label: 'Tasks' },
   { href: '/calls', label: 'Calls' },
   { href: '/workflows', label: 'Workflows' },

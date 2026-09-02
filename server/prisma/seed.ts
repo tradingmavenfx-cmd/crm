@@ -349,6 +349,101 @@ async function seedTelephonyAndSms(tenantId: string): Promise<void> {
     });
   }
 
+  const productCount = await prisma.product.count({ where: { tenantId } });
+  if (productCount === 0) {
+    const catalogue = [
+      {
+        sku: 'CRM-PRO',
+        name: 'CRM Pro licence (per user / year)',
+        unitPrice: 12000,
+        taxRate: 18,
+        hsnCode: '997331',
+      },
+      {
+        sku: 'CRM-ENT',
+        name: 'CRM Enterprise licence (per user / year)',
+        unitPrice: 24000,
+        taxRate: 18,
+        hsnCode: '997331',
+      },
+      {
+        sku: 'ONBOARD',
+        name: 'Onboarding & data migration',
+        unitPrice: 75000,
+        taxRate: 18,
+        hsnCode: '998313',
+      },
+      {
+        sku: 'WA-CREDITS',
+        name: 'WhatsApp conversation credits (1000)',
+        unitPrice: 3500,
+        taxRate: 18,
+        hsnCode: '998414',
+      },
+    ];
+
+    const created = [];
+    for (const item of catalogue) {
+      created.push(
+        await prisma.product.create({ data: { tenantId, ...item } }),
+      );
+    }
+
+    // A standard book at list price, and an enterprise book at a better rate.
+    const standard = await prisma.priceBook.create({
+      data: { tenantId, name: 'Standard (INR)', isDefault: true },
+    });
+    const enterprise = await prisma.priceBook.create({
+      data: { tenantId, name: 'Enterprise (INR)' },
+    });
+
+    for (const product of created) {
+      await prisma.priceBookEntry.create({
+        data: {
+          tenantId,
+          priceBookId: standard.id,
+          productId: product.id,
+          unitPrice: product.unitPrice,
+        },
+      });
+      await prisma.priceBookEntry.create({
+        data: {
+          tenantId,
+          priceBookId: enterprise.id,
+          productId: product.id,
+          // 15% off list for enterprise customers
+          unitPrice: Number(product.unitPrice) * 0.85,
+        },
+      });
+    }
+  }
+
+  const discountRuleCount = await prisma.discountRule.count({
+    where: { tenantId },
+  });
+  if (discountRuleCount === 0) {
+    await prisma.discountRule.create({
+      data: {
+        tenantId,
+        name: 'Reps may discount up to 10%',
+        priority: 0,
+        appliesToRoles: [Role.SALES_REP],
+        maxDiscountPercent: 10,
+        approverRole: Role.MANAGER,
+      },
+    });
+    await prisma.discountRule.create({
+      data: {
+        tenantId,
+        name: 'Managers may discount up to 25%',
+        priority: 10,
+        appliesToRoles: [Role.MANAGER],
+        maxDiscountPercent: 25,
+        approverRole: Role.TENANT_ADMIN,
+      },
+    });
+  }
+
   const templateCount = await prisma.smsTemplate.count({ where: { tenantId } });
   if (templateCount === 0) {
     await prisma.smsTemplate.createMany({
