@@ -115,6 +115,29 @@ export class AuthService {
     return this.buildAuthResult(user, tenant.slug);
   }
 
+  /**
+   * The signed-in user, for a client that has a token but no user in memory —
+   * a page reload, which otherwise left the app not knowing who was using it.
+   */
+  async me(userId: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, isActive: true },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        tenantId: true,
+        tenant: { select: { slug: true } },
+      },
+    });
+    if (!user) throw new UnauthorizedException('Invalid credentials');
+
+    const { tenant, ...rest } = user;
+    return { user: rest, tenantSlug: tenant.slug };
+  }
+
   async refresh(refreshToken: string): Promise<AuthTokens> {
     let payload: JwtPayload;
     try {

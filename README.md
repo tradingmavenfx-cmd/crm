@@ -18,9 +18,9 @@ See [`implementation_plan.md`](./implementation_plan.md) for the full 6-phase ro
 Phases 1 and 2 are complete, apart from the Phase 2 features that depend on an
 LLM or on WebRTC — those moved to Phase 3 alongside the rest of the AI work.
 Phase 3 — Intelligence & Automation — is complete. **Phase 4 — Advanced Sales
-& Marketing** is in progress: CPQ (4.1) and Service Cloud ticketing (4.3) are
-built; the rest of Sales Cloud, the knowledge base and Marketing Cloud (4.2)
-are not.
+& Marketing** is in progress: CPQ (4.1), Service Cloud ticketing and the
+knowledge base (4.3) are built; the rest of Sales Cloud, the customer portal
+and Marketing Cloud (4.2) are not.
 
 - [x] Monorepo scaffolding
 - [x] NestJS backend foundation (config, Prisma, global guards, Swagger)
@@ -350,7 +350,9 @@ solve with whitelisted dimensions instead.
       management
 - [x] 4.3 Service Cloud ticketing — multi-channel intake, auto-categorisation,
       SLA policies with escalation, routing, merge/link, CSAT
-- [ ] 4.3 rest — knowledge base, customer portal
+- [x] 4.3 Knowledge base — versioned articles, public help centre, multilingual
+      translations, article suggestions on a ticket, search-gap analytics
+- [ ] 4.3 rest — customer portal
 
 ### CPQ — configure, price, quote
 
@@ -425,6 +427,37 @@ unreachable while the ticket is still open, and accepts exactly one rating.
 Ticket data also feeds the reports engine: `service.tickets` and
 `service.ticket_agents` join the catalogue, so ticket load and SLA compliance
 sit on a dashboard next to pipeline and campaign figures.
+
+### Knowledge base and help centre
+
+An article is written by an agent at `/kb` and read by a customer at
+`/help/:tenantId`. The two are deliberately not the same text: **the help centre
+serves the last published version, not the working row.** An agent part-way
+through a rewrite never takes the live answer offline, and the editor shows a
+banner saying what customers still see. Publishing snapshots the current text as
+the next version, so the history is a real trail — v1 is never overwritten — and
+any version can be restored. Restoring the live version is how an unfinished
+draft gets thrown away.
+
+**Visibility is separate from status.** An `INTERNAL` article is published and
+searchable by agents but never reachable from the help centre, so a runbook can
+say "confirm with finance first" without a customer reading it. Article
+suggestions on a ticket show internal articles too, marked, and offer a
+copyable link only for the public ones.
+
+**Search is transparent, not magic.** A term in the title scores 10, in the tags
+6, in the excerpt 3 and in the body 1, with a small bonus for a well-rated
+article, and stop words are dropped so a natural question ("how long does my
+refund take?") still matches. There is no embedding model and no external call —
+the ranking can be explained to whoever asks why their article is third.
+
+**Every search is logged, including the ones that found nothing.** Those misses
+are the point: `/kb/search-analytics` ranks the questions the knowledge base
+could not answer, which is the list of articles worth writing next.
+
+Articles can be translated: a translation carries its own slug and locale and
+links back to its source, so `/help/:tenantId?locale=hi` is a Hindi help centre
+over the same knowledge base.
 
 ### Verify locally
 

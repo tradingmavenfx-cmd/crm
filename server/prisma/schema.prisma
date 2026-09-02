@@ -70,6 +70,11 @@ model Tenant {
   ticketEvents       TicketEvent[]
   slaPolicies        SlaPolicy[]
   ticketRules        TicketRule[]
+  articles           Article[]
+  articleCategories  ArticleCategory[]
+  articleVersions    ArticleVersion[]
+  articleFeedback    ArticleFeedback[]
+  kbSearches         KbSearch[]
 
   @@map("tenants")
 }
@@ -123,6 +128,7 @@ model User {
   assignedTickets       Ticket[]         @relation("TicketAssignee")
   ticketComments        TicketComment[]  @relation("TicketCommentAuthor")
   ticketRules           TicketRule[]     @relation("TicketRuleAssignee")
+  authoredArticles      Article[]        @relation("ArticleAuthor")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -1418,4 +1424,146 @@ model TicketEvent {
 
   @@index([tenantId, ticketId, createdAt])
   @@map("ticket_events")
+}
+
+// -----------------------------------------------------------
+// Knowledge base (Phase 4.3)
+// -----------------------------------------------------------
+
+enum ArticleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ArticleVisibility {
+  /// Visible in the customer-facing help centre
+  PUBLIC
+  /// Agents only
+  INTERNAL
+}
+
+model ArticleCategory {
+  id          String  @id @default(uuid())
+  tenantId    String
+  name        String
+  slug        String
+  description String?
+  position    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  articles Article[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, position])
+  @@map("article_categories")
+}
+
+model Article {
+  id       String  @id @default(uuid())
+  tenantId String
+  /// URL segment, unique per tenant and locale
+  slug     String
+  title    String
+  /// Short summary shown in listings and search results
+  excerpt  String?
+  body     String
+
+  status     ArticleStatus     @default(DRAFT)
+  visibility ArticleVisibility @default(PUBLIC)
+  categoryId String?
+  tags       String[]          @default([])
+
+  /// BCP-47 language tag, e.g. "en" or "hi"
+  locale          String  @default("en")
+  /// Points at the original when this article is a translation of it
+  translationOfId String?
+
+  /// Bumped on every published revision; the body of each is kept
+  version Int @default(1)
+
+  authorId    String?
+  publishedAt DateTime?
+
+  viewCount       Int @default(0)
+  helpfulCount    Int @default(0)
+  notHelpfulCount Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category      ArticleCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  author        User?             @relation("ArticleAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  translationOf Article?          @relation("ArticleTranslations", fields: [translationOfId], references: [id], onDelete: SetNull)
+  translations  Article[]         @relation("ArticleTranslations")
+  versions      ArticleVersion[]
+  feedback      ArticleFeedback[]
+
+  @@unique([tenantId, locale, slug])
+  @@index([tenantId, status, visibility])
+  @@index([tenantId, categoryId])
+  @@map("articles")
+}
+
+/// A snapshot of an article as it was published, so an edit can be rolled back.
+model ArticleVersion {
+  id        String  @id @default(uuid())
+  tenantId  String
+  articleId String
+  version   Int
+  title     String
+  body      String
+  authorId  String?
+  /// What changed, when the author bothered to say
+  note      String?
+
+  createdAt DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([articleId, version])
+  @@index([tenantId, articleId])
+  @@map("article_versions")
+}
+
+model ArticleFeedback {
+  id        String  @id @default(uuid())
+  tenantId  String
+  articleId String
+  helpful   Boolean
+  comment   String?
+
+  createdAt DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, articleId])
+  @@map("article_feedback")
+}
+
+/// Every search, so the gaps in the knowledge base are visible.
+model KbSearch {
+  id          String  @id @default(uuid())
+  tenantId    String
+  query       String
+  /// How many articles the search returned; zero is the interesting case
+  resultCount Int
+  /// Set for an agent search; null when it came from the help centre
+  userId      String?
+  /// public | agent
+  source      String  @default("public")
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, resultCount])
+  @@map("kb_searches")
 }

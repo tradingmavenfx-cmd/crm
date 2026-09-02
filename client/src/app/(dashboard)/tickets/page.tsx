@@ -3,7 +3,9 @@
 import { FormEvent, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { useAuthStore } from '@/stores/auth.store';
 import {
+  KbSuggestion,
   Ticket,
   TicketDetail,
   TicketRule,
@@ -413,6 +415,8 @@ export default function TicketsPage() {
               </p>
             )}
 
+            <ArticleSuggestions ticketId={detail.data.id} />
+
             <div className="max-h-52 space-y-2 overflow-y-auto border-t border-slate-200 pt-3">
               {detail.data.comments?.map((c) => (
                 <div
@@ -521,6 +525,67 @@ export default function TicketsPage() {
           ))}
         </div>
       </Modal>
+    </div>
+  );
+}
+
+/**
+ * Knowledge base articles that match the ticket, so an agent can answer with
+ * the existing wording instead of writing it again. Internal-only articles
+ * appear here but are marked, since they must not be pasted to a customer.
+ */
+function ArticleSuggestions({ ticketId }: { ticketId: string }) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const tenantId = useAuthStore((s) => s.user?.tenantId);
+
+  const suggestions = useQuery({
+    queryKey: ['kb', 'suggest', ticketId],
+    queryFn: async () =>
+      (await api.get<KbSuggestion[]>(`/kb/suggest/ticket/${ticketId}`)).data,
+  });
+
+  if (!suggestions.data?.length) return null;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Suggested articles
+      </p>
+      <ul className="space-y-2">
+        {suggestions.data.slice(0, 3).map((a) => (
+          <li key={a.id} className="text-sm">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="font-medium text-slate-800">
+                  {a.title}
+                  {a.visibility === 'INTERNAL' && (
+                    <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+                      internal
+                    </span>
+                  )}
+                </p>
+                {a.excerpt && (
+                  <p className="text-xs text-slate-500">{a.excerpt}</p>
+                )}
+              </div>
+              {a.visibility === 'PUBLIC' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(
+                      `${window.location.origin}/help/${tenantId}/${a.slug}`,
+                    );
+                    setCopied(a.id);
+                  }}
+                  className="shrink-0 text-xs text-brand-700 hover:underline"
+                >
+                  {copied === a.id ? 'Copied' : 'Copy link'}
+                </button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

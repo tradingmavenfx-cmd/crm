@@ -89,8 +89,19 @@ export const useAuthStore = create<AuthState>((set) => ({
   hydrate: () => {
     // Token presence is enough to consider the session active on the client;
     // protected API calls will 401 -> refresh -> or redirect if invalid.
-    if (tokenStore.getAccess()) {
-      set((s) => ({ ...s, tenantSlug: s.tenantSlug ?? slugStore.get() }));
-    }
+    if (!tokenStore.getAccess()) return;
+    set((s) => ({ ...s, tenantSlug: s.tenantSlug ?? slugStore.get() }));
+
+    // A reload leaves the store with a token but no user, so anything keyed
+    // off the signed-in user (their name, their workspace) came back blank.
+    api
+      .get('/auth/me')
+      .then(({ data }) => {
+        slugStore.set(data.tenantSlug);
+        set({ user: data.user, tenantSlug: data.tenantSlug });
+      })
+      .catch(() => {
+        // An invalid token is handled by the API client's 401 flow.
+      });
   },
 }));

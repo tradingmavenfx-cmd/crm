@@ -25,6 +25,7 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { AiModule } from './modules/ai/ai.module';
 import { CpqModule } from './modules/cpq/cpq.module';
 import { TicketsModule } from './modules/tickets/tickets.module';
+import { KbModule } from './modules/kb/kb.module';
 import { VoiceModule } from './modules/voice/voice.module';
 import { InboxModule } from './modules/inbox/inbox.module';
 import { HealthController } from './modules/health/health.controller';
@@ -65,6 +66,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     CpqModule,
     InboxModule,
     TicketsModule,
+    KbModule,
   ],
   controllers: [HealthController],
   providers: [
