@@ -16,6 +16,14 @@ export class MockEmailProvider implements EmailProvider {
 
   async send(input: SendEmailInput): Promise<SendEmailResult> {
     this.logger.log(`[mock] email -> ${input.to} | subject: ${input.subject}`);
+    // The body is logged too, so a link that would have been emailed — a
+    // portal sign-in link, say — can be opened while developing. This provider
+    // is only ever used when no mail server is configured.
+    const body = input.text ?? input.html;
+    if (body) {
+      this.logger.debug('[mock] body:');
+      this.logger.debug(body);
+    }
     return { externalId: `mock-email-${randomUUID()}` };
   }
 }

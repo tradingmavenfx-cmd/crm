@@ -18,9 +18,9 @@ See [`implementation_plan.md`](./implementation_plan.md) for the full 6-phase ro
 Phases 1 and 2 are complete, apart from the Phase 2 features that depend on an
 LLM or on WebRTC — those moved to Phase 3 alongside the rest of the AI work.
 Phase 3 — Intelligence & Automation — is complete. **Phase 4 — Advanced Sales
-& Marketing** is in progress: CPQ (4.1), Service Cloud ticketing and the
-knowledge base (4.3) are built; the rest of Sales Cloud, the customer portal
-and Marketing Cloud (4.2) are not.
+& Marketing** is in progress: CPQ (4.1) and all of Service Cloud (4.3 —
+ticketing, knowledge base and customer portal) are built; the rest of Sales
+Cloud and Marketing Cloud (4.2) are not.
 
 - [x] Monorepo scaffolding
 - [x] NestJS backend foundation (config, Prisma, global guards, Swagger)
@@ -352,7 +352,8 @@ solve with whitelisted dimensions instead.
       SLA policies with escalation, routing, merge/link, CSAT
 - [x] 4.3 Knowledge base — versioned articles, public help centre, multilingual
       translations, article suggestions on a ticket, search-gap analytics
-- [ ] 4.3 rest — customer portal
+- [x] 4.3 Customer portal — passwordless sign-in, request tracking with
+      replies, quotes and invoices
 
 ### CPQ — configure, price, quote
 
@@ -458,6 +459,38 @@ could not answer, which is the list of articles worth writing next.
 Articles can be translated: a translation carries its own slug and locale and
 links back to its source, so `/help/:tenantId?locale=hi` is a Hindi help centre
 over the same knowledge base.
+
+### Customer portal
+
+`/portal/:tenantId` is where a customer tracks their own requests, replies to
+them, and sees the quotes and invoices raised against them.
+
+**There are no customer passwords.** Signing in emails a one-time link; opening
+it exchanges the link for a session and spends the link in the same breath. The
+CRM therefore stores no customer credentials to leak, and both the link and the
+session are held as SHA-256 hashes — a dump of those tables cannot be replayed
+as a login.
+
+**Asking for a link says the same thing whatever the answer.** A known address,
+an unknown one and a workspace that does not exist all get the identical reply,
+so the portal cannot be used to enumerate a company's customers. Every rejection
+of a link reads the same too: expired, already spent, wrong workspace and never
+existed are indistinguishable from outside.
+
+**The session decides whose data this is** — never an id in the path. Every
+query is scoped by tenant *and* contact, so another customer's ticket 404s
+exactly like one that never existed. Internal notes are filtered out in the
+query itself, not in the view.
+
+A portal reply is deliberately **not** routed through the agent comment path:
+that stamps the first-response clock, and a customer answering themselves must
+never mark the team's SLA as met. Replying to a resolved request reopens it.
+Raising a request goes through the same routing rules and SLA policies as one
+an agent raises, but priority and assignee are not accepted from the customer.
+
+Because a portal request has no channel thread to answer on, an agent's public
+reply emails the customer a notice with a link back to the portal — the reply
+itself stays behind the session rather than sitting in an inbox.
 
 ### Verify locally
 

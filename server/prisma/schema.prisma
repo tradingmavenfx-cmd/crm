@@ -75,6 +75,8 @@ model Tenant {
   articleVersions    ArticleVersion[]
   articleFeedback    ArticleFeedback[]
   kbSearches         KbSearch[]
+  portalLogins       PortalLoginToken[]
+  portalSessions     PortalSession[]
 
   @@map("tenants")
 }
@@ -188,6 +190,8 @@ model Contact {
   enrollments        SequenceEnrollment[]
   quotes             Quote[]
   tickets            Ticket[]
+  portalLogins       PortalLoginToken[]
+  portalSessions     PortalSession[]
 
   @@index([tenantId])
   @@index([tenantId, email])
@@ -1566,4 +1570,46 @@ model KbSearch {
   @@index([tenantId, createdAt])
   @@index([tenantId, resultCount])
   @@map("kb_searches")
+}
+
+// ── Customer portal ────────────────────────────
+//
+// Customers sign in with a link emailed to them, never a password: the CRM
+// then holds no customer credentials to leak. Both tokens are stored as
+// SHA-256 hashes, so a dump of these tables cannot be replayed as a login.
+
+/// A single-use link emailed to a contact so they can open the portal.
+model PortalLoginToken {
+  id         String    @id @default(uuid())
+  tenantId   String
+  contactId  String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  /// Set the moment it is exchanged for a session, so a forwarded link is dead
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, contactId, createdAt])
+  @@map("portal_login_tokens")
+}
+
+/// The session a consumed link opens. Revocable, and scoped to one contact.
+model PortalSession {
+  id         String    @id @default(uuid())
+  tenantId   String
+  contactId  String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  lastSeenAt DateTime  @default(now())
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, contactId])
+  @@map("portal_sessions")
 }

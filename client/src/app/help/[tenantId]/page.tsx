@@ -91,7 +91,14 @@ export default function HelpCentrePage({
             </button>
           </form>
 
-          <div className="mt-4 flex justify-center gap-2 text-sm">
+          <div className="mt-4 flex items-center justify-center gap-2 text-sm">
+            <Link
+              href={`/portal/${tenantId}`}
+              className="rounded-full px-3 py-1 text-brand-700 hover:bg-brand-50"
+            >
+              Your account
+            </Link>
+            <span className="text-slate-300">|</span>
             {LOCALES.map((l) => (
               <button
                 key={l.code}

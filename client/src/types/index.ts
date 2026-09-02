@@ -753,6 +753,64 @@ export interface KbSuggestion {
   score: number;
 }
 
+// ── Customer portal ────────────────────────────
+
+export interface PortalAccount {
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  company: string | null;
+  tenant: string;
+}
+
+export interface PortalTicket {
+  id: string;
+  number: string;
+  subject: string;
+  status: TicketStatusValue;
+  category: string | null;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt: string | null;
+}
+
+export interface PortalTicketDetail extends PortalTicket {
+  description: string | null;
+  csatRating: number | null;
+  assignee: { firstName: string } | null;
+  comments: {
+    id: string;
+    body: string;
+    createdAt: string;
+    /** "You" for the customer's own replies, otherwise the agent's name */
+    from: string;
+    mine: boolean;
+  }[];
+}
+
+export interface PortalQuote {
+  number: string;
+  status: string;
+  currency: string;
+  total: string;
+  validUntil: string | null;
+  sentAt: string | null;
+  acceptedAt: string | null;
+  /** Path to the existing customer-facing quote page */
+  path: string;
+}
+
+export interface PortalInvoice {
+  number: string;
+  status: string;
+  currency: string;
+  total: string;
+  dueAt: string | null;
+  issuedAt: string | null;
+  paidAt: string | null;
+}
+
 /** A search result on the public help centre */
 export interface HelpResult {
   slug: string;

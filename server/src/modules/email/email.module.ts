@@ -27,6 +27,8 @@ import { RoutingModule } from '../routing/routing.module';
       ) => (config.get<boolean>('email.enabled') ? smtp : mock),
     },
   ],
-  exports: [EmailService],
+  // EMAIL_PROVIDER is exported for senders that are not conversations — the
+  // portal's sign-in link has no business in an agent's inbox.
+  exports: [EmailService, EMAIL_PROVIDER],
 })
 export class EmailModule {}

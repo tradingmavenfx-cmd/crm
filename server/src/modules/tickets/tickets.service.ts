@@ -17,6 +17,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { InboxService } from '../inbox/inbox.service';
 import { WORKFLOW_EVENT } from '../workflows/workflow-events';
+import { TICKET_REPLY_EVENT, TicketReplyEvent } from './ticket-events';
 import {
   CreateSlaPolicyDto,
   CreateTicketDto,
@@ -494,6 +495,17 @@ export class TicketsService {
         where: { id },
         data: { firstRespondedAt: new Date() },
       });
+    }
+
+    if (!isInternal) {
+      // Whoever cares that the customer should be told — the portal, today —
+      // picks this up. Delivery over their own channel is reported so nobody
+      // gets told twice.
+      this.events.emit(TICKET_REPLY_EVENT, {
+        tenantId,
+        ticketId: id,
+        delivered: deliveredOn !== null,
+      } satisfies TicketReplyEvent);
     }
 
     return { ...comment, deliveredOn };
