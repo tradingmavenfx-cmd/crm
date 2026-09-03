@@ -95,6 +95,7 @@ model Tenant {
   documents          Document[]
   sessions           UserSession[]
   loginAttempts      LoginAttempt[]
+  settings           TenantSettings?
   apiKeys            ApiKey[]
   webhooks           Webhook[]
   webhookDeliveries  WebhookDelivery[]
@@ -2408,4 +2409,48 @@ model WebhookDelivery {
   @@index([tenantId, webhookId, createdAt])
   @@index([status, nextAttemptAt])
   @@map("webhook_deliveries")
+}
+
+// -----------------------------------------------------------
+// Tenant settings: branding, locale and payment details
+// -----------------------------------------------------------
+
+/// Everything a workspace can make its own. Absent means the defaults below.
+model TenantSettings {
+  id       String @id @default(uuid())
+  tenantId String @unique
+
+  /// What the product is called inside this workspace
+  productName  String?
+  logoUrl      String?
+  /// Base brand colour as #rrggbb; the shades either side are derived from it
+  primaryColor String  @default("#4f46e5")
+
+  /// Shown on the sign-in page and on public pages
+  loginHeadline String?
+  loginSubtext  String?
+  supportEmail  String?
+
+  /// crm.theircompany.com, once a CNAME points at us
+  customDomain String? @unique
+
+  /// Whether public pages carry our name at the foot
+  showPoweredBy Boolean @default(true)
+
+  timezone String @default("Asia/Kolkata")
+  currency String @default("INR")
+  locale   String @default("en-IN")
+
+  /// For a compliant Indian invoice
+  gstin   String?
+  /// Where money should be sent: a UPI id and the name behind it
+  upiVpa  String?
+  upiName String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_settings")
 }

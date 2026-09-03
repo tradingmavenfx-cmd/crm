@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useAuthStore } from '@/stores/auth.store';
+import { useBranding } from '@/components/Branding';
 
 const nav = [
   { href: '/dashboard', label: 'Dashboard' },
@@ -33,15 +35,30 @@ const nav = [
   { href: '/sms-templates', label: 'SMS Templates' },
   { href: '/security', label: 'Security' },
   { href: '/developer', label: 'Developer' },
+  { href: '/settings', label: 'Settings' },
+  { href: '/platform', label: 'Platform' },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const tenantSlug = useAuthStore((s) => s.tenantSlug);
+  const branding = useBranding(tenantSlug);
 
   return (
     <aside className="w-60 shrink-0 border-r border-slate-200 bg-white h-screen sticky top-0 p-4">
       <div className="px-2 mb-6">
-        <span className="text-lg font-bold text-brand-700">CRM Pro</span>
+        {branding.data?.logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={branding.data.logoUrl}
+            alt={branding.data.productName}
+            className="max-h-8"
+          />
+        ) : (
+          <span className="text-lg font-bold text-brand-700">
+            {branding.data?.productName ?? 'CRM Pro'}
+          </span>
+        )}
       </div>
       <nav className="space-y-1">
         {nav.map((item) => {

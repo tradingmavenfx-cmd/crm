@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { AxiosError } from 'axios';
 import { slugStore, useAuthStore } from '@/stores/auth.store';
+import { BrandingProvider, useBranding } from '@/components/Branding';
 import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 
@@ -14,6 +15,7 @@ export default function LoginPage() {
   const loading = useAuthStore((s) => s.loading);
   const [error, setError] = useState<string | null>(null);
   const [slug, setSlug] = useState('');
+  const branding = useBranding(slug || null);
 
   // Prefill the workspace used last on this browser - it is the detail people
   // are most likely to have forgotten. Read after mount to keep SSR output
@@ -42,8 +44,24 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen flex items-center justify-center px-6">
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
-        <h1 className="text-2xl font-bold mb-1">Welcome back</h1>
-        <p className="text-slate-500 text-sm mb-6">Sign in to your workspace</p>
+        <BrandingProvider slug={slug || null} />
+        {branding.data?.logoUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={branding.data.logoUrl}
+            alt={branding.data.productName}
+            className="mb-4 max-h-10"
+          />
+        )}
+        <h1 className="text-2xl font-bold mb-1">
+          {branding.data?.loginHeadline ?? 'Welcome back'}
+        </h1>
+        <p className="text-slate-500 text-sm mb-6">
+          {branding.data?.loginSubtext ??
+            (branding.data
+              ? `Sign in to ${branding.data.productName}`
+              : 'Sign in to your workspace')}
+        </p>
 
         <form onSubmit={onSubmit} className="space-y-4">
           <Field
