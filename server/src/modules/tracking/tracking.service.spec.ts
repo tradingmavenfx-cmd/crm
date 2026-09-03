@@ -32,7 +32,9 @@ describe('TrackingService', () => {
       },
       campaignRecipient: {
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        findFirst: jest.fn().mockResolvedValue(null),
       },
+      touchpoint: { create: jest.fn().mockResolvedValue({}) },
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -116,6 +118,38 @@ describe('TrackingService', () => {
 
     await expect(service.recordOpen('gone')).resolves.toBeUndefined();
     expect(prisma.emailEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('records an open against the person, for attribution', async () => {
+    prisma.message.findUnique.mockResolvedValue({
+      id: 'msg-1',
+      tenantId: 'tenant-1',
+    });
+    prisma.campaignRecipient.findFirst.mockResolvedValue({
+      tenantId: 'tenant-1',
+      contactId: 'c1',
+      campaignId: 'cam1',
+    });
+
+    await service.recordOpen('msg-1');
+
+    expect(prisma.touchpoint.create.mock.calls[0][0].data).toMatchObject({
+      contactId: 'c1',
+      campaignId: 'cam1',
+      type: 'email_open',
+    });
+  });
+
+  it('records nothing when the open cannot be tied to a person', async () => {
+    prisma.message.findUnique.mockResolvedValue({
+      id: 'msg-1',
+      tenantId: 'tenant-1',
+    });
+    prisma.campaignRecipient.findFirst.mockResolvedValue(null);
+
+    await service.recordOpen('msg-1');
+
+    expect(prisma.touchpoint.create).not.toHaveBeenCalled();
   });
 
   it('counts a click and returns the destination', async () => {

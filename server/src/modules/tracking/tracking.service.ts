@@ -101,6 +101,32 @@ export class TrackingService {
       where: { messageId: message.id, openedAt: null },
       data: { openedAt: new Date() },
     });
+    await this.recordTouch(message.id, 'email_open');
+  }
+
+  /**
+   * Records an open or a click against the person it came from.
+   *
+   * Written here rather than in the marketing module because this is where the
+   * message and the recipient are already known; the attribution report reads
+   * these rows and has no other way of learning that an email was engaged with.
+   */
+  private async recordTouch(messageId: string, type: string, url?: string) {
+    const recipient = await this.prisma.campaignRecipient.findFirst({
+      where: { messageId },
+      select: { tenantId: true, contactId: true, campaignId: true },
+    });
+    if (!recipient?.contactId) return;
+
+    await this.prisma.touchpoint.create({
+      data: {
+        tenantId: recipient.tenantId,
+        contactId: recipient.contactId,
+        campaignId: recipient.campaignId,
+        type,
+        detail: url ? { url } : {},
+      },
+    });
   }
 
   /** Resolves a short link, counts the click, and returns the destination. */
@@ -127,6 +153,7 @@ export class TrackingService {
         where: { messageId: link.messageId, clickedAt: null },
         data: { clickedAt: new Date() },
       });
+      await this.recordTouch(link.messageId, 'email_click', link.url);
     }
 
     return link.url;

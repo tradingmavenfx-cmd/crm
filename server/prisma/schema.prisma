@@ -84,6 +84,11 @@ model Tenant {
   contests           Contest[]
   badges             Badge[]
   userBadges         UserBadge[]
+  leads              Lead[]
+  touchpoints        Touchpoint[]
+  landingPages       LandingPage[]
+  marketingForms     MarketingForm[]
+  formSubmissions    FormSubmission[]
 
   @@map("tenants")
 }
@@ -141,6 +146,8 @@ model User {
   managedTerritories    Territory[]        @relation("TerritoryManager")
   territoryMemberships  TerritoryMember[]
   quotas                Quota[]            @relation("QuotaOwner")
+  ownedLeads            Lead[]             @relation("LeadOwner")
+  assignedForms         MarketingForm[]    @relation("FormAssignee")
   forecastSnapshots     ForecastSnapshot[] @relation("ForecastOwner")
   badges                UserBadge[]
 
@@ -215,6 +222,7 @@ model Contact {
   tickets            Ticket[]
   portalLogins       PortalLoginToken[]
   portalSessions     PortalSession[]
+  touchpoints        Touchpoint[]
 
   @@index([tenantId])
   @@index([tenantId, email])
@@ -622,7 +630,18 @@ model Campaign {
   whatsappTemplateName String?
 
   /// Audience filter: { contactIds?, minScore?, companyId?, ownerId? }
-  segment     Json      @default("{}")
+  segment Json @default("{}")
+
+  /// What running it cost, so revenue attributed back to it means something
+  cost     Decimal @default(0) @db.Decimal(18, 2)
+  currency String  @default("INR")
+
+  /// A/B test: a variant is a sibling of the campaign it tests against, and
+  /// the audience is split between them.
+  variantOfId   String?
+  /// Share of the audience this variant takes, as a percentage
+  variantWeight Int     @default(50)
+
   scheduledAt DateTime?
   startedAt   DateTime?
   completedAt DateTime?
@@ -631,9 +650,12 @@ model Campaign {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  createdBy  User?               @relation("CampaignCreator", fields: [createdById], references: [id])
-  recipients CampaignRecipient[]
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy   User?               @relation("CampaignCreator", fields: [createdById], references: [id])
+  recipients  CampaignRecipient[]
+  variantOf   Campaign?           @relation("CampaignVariants", fields: [variantOfId], references: [id], onDelete: SetNull)
+  variants    Campaign[]          @relation("CampaignVariants")
+  touchpoints Touchpoint[]
 
   @@index([tenantId, status])
   @@index([tenantId, scheduledAt])
@@ -1824,4 +1846,187 @@ model UserBadge {
   @@unique([userId, badgeId])
   @@index([tenantId, userId])
   @@map("user_badges")
+}
+
+// -----------------------------------------------------------
+// Marketing: leads, capture, landing pages and attribution
+// -----------------------------------------------------------
+
+enum LeadStatus {
+  NEW
+  WORKING
+  NURTURING
+  QUALIFIED
+  CONVERTED
+  DISQUALIFIED
+}
+
+/// Somebody who has shown interest but is not yet a contact on an account.
+model Lead {
+  id        String  @id @default(uuid())
+  tenantId  String
+  firstName String
+  lastName  String?
+  email     String?
+  phone     String?
+  /// Free text: the company as the lead typed it, before it is an account
+  company   String?
+  jobTitle  String?
+
+  status LeadStatus @default(NEW)
+  score  Int        @default(0)
+
+  /// Where it came from, and the campaign parameters that carried it
+  source       String?
+  sourceDetail String?
+  utmSource    String?
+  utmMedium    String?
+  utmCampaign  String?
+  utmTerm      String?
+  utmContent   String?
+
+  ownerId String?
+  /// Anything the form collected beyond the fields above
+  fields  Json    @default("{}")
+
+  /// What it turned into. Kept rather than deleted, so the trail survives.
+  convertedContactId String?
+  convertedCompanyId String?
+  convertedDealId    String?
+  convertedAt        DateTime?
+  disqualifiedReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owner       User?            @relation("LeadOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  touchpoints Touchpoint[]
+  submissions FormSubmission[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, email])
+  @@map("leads")
+}
+
+/// One thing that happened on the way to a sale. Attribution is worked out
+/// from these rather than from a single source field that only ever holds
+/// whichever touch happened to be written last.
+model Touchpoint {
+  id        String  @id @default(uuid())
+  tenantId  String
+  leadId    String?
+  /// Set once the lead converts, so the trail follows the person
+  contactId String?
+
+  /// page_view | form_submit | campaign_send | email_open | email_click
+  type       String
+  channel    Channel?
+  campaignId String?
+  pageId     String?
+  detail     Json     @default("{}")
+  occurredAt DateTime @default(now())
+
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead     Lead?        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  contact  Contact?     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  campaign Campaign?    @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  page     LandingPage? @relation(fields: [pageId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, leadId, occurredAt])
+  @@index([tenantId, contactId, occurredAt])
+  @@map("touchpoints")
+}
+
+enum PageStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+/// A public page built from a list of blocks. The blocks are the same data a
+/// drag-and-drop editor would produce, edited as a list.
+model LandingPage {
+  id       String     @id @default(uuid())
+  tenantId String
+  slug     String
+  title    String
+  status   PageStatus @default(DRAFT)
+
+  /// [{ type: heading | text | image | form | button, ... }]
+  blocks Json    @default("[]")
+  formId String?
+
+  metaTitle       String?
+  metaDescription String?
+
+  /// A/B: a variant is a sibling of the page it tests against
+  variantOfId   String?
+  variantWeight Int     @default(50)
+
+  views       Int       @default(0)
+  submissions Int       @default(0)
+  publishedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  form            MarketingForm?   @relation(fields: [formId], references: [id], onDelete: SetNull)
+  variantOf       LandingPage?     @relation("PageVariants", fields: [variantOfId], references: [id], onDelete: SetNull)
+  variants        LandingPage[]    @relation("PageVariants")
+  formSubmissions FormSubmission[]
+  touchpoints     Touchpoint[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, status])
+  @@map("landing_pages")
+}
+
+/// The fields a page asks for, and what happens when they are filled in.
+model MarketingForm {
+  id       String @id @default(uuid())
+  tenantId String
+  name     String
+
+  /// [{ name, label, type, required }]
+  fields Json @default("[]")
+
+  /// Where a submission goes
+  assignToId String?
+  sequenceId String?
+  /// Shown after a successful submit
+  thankYou   String  @default("Thanks - we will be in touch shortly.")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignTo    User?            @relation("FormAssignee", fields: [assignToId], references: [id], onDelete: SetNull)
+  pages       LandingPage[]
+  submissions FormSubmission[]
+
+  @@index([tenantId])
+  @@map("marketing_forms")
+}
+
+model FormSubmission {
+  id       String  @id @default(uuid())
+  tenantId String
+  formId   String
+  pageId   String?
+  leadId   String?
+
+  data Json @default("{}")
+  utm  Json @default("{}")
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  form   MarketingForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+  page   LandingPage?  @relation(fields: [pageId], references: [id], onDelete: SetNull)
+  lead   Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, formId, createdAt])
+  @@map("form_submissions")
 }

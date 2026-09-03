@@ -290,6 +290,17 @@ export class CampaignsService {
           messageId,
           sentAt: new Date(),
         });
+        // Reaching somebody is a touch. Without this the attribution report
+        // could never credit a campaign with anything.
+        await this.prisma.touchpoint.create({
+          data: {
+            tenantId,
+            contactId: contact.id,
+            campaignId: campaign.id,
+            channel: campaign.channel,
+            type: 'campaign_send',
+          },
+        });
         sent++;
       } catch (err) {
         const reason = err instanceof Error ? err.message : 'unknown error';

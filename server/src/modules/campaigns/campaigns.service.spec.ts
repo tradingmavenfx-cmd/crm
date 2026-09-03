@@ -34,6 +34,7 @@ describe('CampaignsService', () => {
         update: jest.fn().mockResolvedValue({}),
         delete: jest.fn(),
       },
+      touchpoint: { create: jest.fn().mockResolvedValue({}) },
       campaignRecipient: {
         upsert: jest.fn().mockResolvedValue({}),
         findMany: jest.fn(),
