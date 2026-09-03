@@ -9,6 +9,14 @@ export interface JwtPayload {
   tenantId: string;
   email: string;
   role: string;
+  /**
+   * Makes every issued token distinct.
+   *
+   * Without it, two sign-ins in the same second produce byte-identical tokens
+   * — same payload, same `iat` — and the second collides with the first on the
+   * session's unique token hash.
+   */
+  jti?: string;
 }
 
 @Injectable()

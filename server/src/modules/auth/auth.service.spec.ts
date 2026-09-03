@@ -6,11 +6,21 @@ import { Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { DEFAULT_POLICY, SecurityService } from '../security/security.service';
 
 describe('AuthService', () => {
   let service: AuthService;
   let prisma: any;
   let jwt: { signAsync: jest.Mock; verifyAsync: jest.Mock };
+  let security: {
+    policy: jest.Mock;
+    lockout: jest.Mock;
+    recordAttempt: jest.Mock;
+    createSession: jest.Mock;
+    liveSession: jest.Mock;
+    rotateSession: jest.Mock;
+    revokeByToken: jest.Mock;
+  };
 
   beforeEach(async () => {
     prisma = {
@@ -22,12 +32,22 @@ describe('AuthService', () => {
       signAsync: jest.fn().mockResolvedValue('signed-token'),
       verifyAsync: jest.fn(),
     };
+    security = {
+      policy: jest.fn().mockResolvedValue(DEFAULT_POLICY),
+      lockout: jest.fn().mockResolvedValue({ locked: false, failures: 0 }),
+      recordAttempt: jest.fn().mockResolvedValue({}),
+      createSession: jest.fn().mockResolvedValue({ id: 's1' }),
+      liveSession: jest.fn().mockResolvedValue(null),
+      rotateSession: jest.fn().mockResolvedValue({}),
+      revokeByToken: jest.fn().mockResolvedValue({ revoked: 1 }),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: PrismaService, useValue: prisma },
         { provide: JwtService, useValue: jwt },
+        { provide: SecurityService, useValue: security },
         {
           provide: ConfigService,
           useValue: { get: (k: string) => `cfg-${k}` },
@@ -150,5 +170,196 @@ describe('AuthService', () => {
     expect(result.user.id).toBe('u1');
     expect(result.tenantSlug).toBe('acme');
     expect(result.tokens.accessToken).toBe('signed-token');
+  });
+
+  // ── Sessions, lockout and the allowlist ────────
+
+  const signedInUser = () => {
+    prisma.tenant.findUnique.mockResolvedValue({
+      id: 't1',
+      slug: 'acme',
+      isActive: true,
+    });
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'u1',
+      tenantId: 't1',
+      email: 'admin@acme.com',
+      firstName: 'Ada',
+      lastName: 'Admin',
+      role: Role.TENANT_ADMIN,
+      isActive: true,
+      passwordHash: bcrypt.hashSync('Password123!', 4),
+    });
+    prisma.user.update.mockResolvedValue({});
+  };
+
+  it('opens a session for the device that signed in', async () => {
+    signedInUser();
+
+    await service.login(
+      { email: 'admin@acme.com', password: 'Password123!', tenantSlug: 'acme' },
+      { ipAddress: '1.2.3.4', userAgent: 'Chrome/120 Windows' },
+    );
+
+    expect(security.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'u1',
+        ipAddress: '1.2.3.4',
+        userAgent: 'Chrome/120 Windows',
+      }),
+    );
+  });
+
+  it('records the sign-in, and records the failures too', async () => {
+    signedInUser();
+    await service.login(
+      { email: 'admin@acme.com', password: 'Password123!', tenantSlug: 'acme' },
+      {},
+    );
+    expect(security.recordAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ success: true }),
+    );
+
+    security.recordAttempt.mockClear();
+    await service
+      .login(
+        { email: 'admin@acme.com', password: 'wrong', tenantSlug: 'acme' },
+        {},
+      )
+      .catch(() => undefined);
+    expect(security.recordAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ success: false, reason: 'bad_password' }),
+    );
+  });
+
+  it('refuses to test a password at all once locked out', async () => {
+    signedInUser();
+    security.lockout.mockResolvedValue({
+      locked: true,
+      failures: 5,
+      until: new Date(),
+    });
+
+    await expect(
+      service.login(
+        {
+          email: 'admin@acme.com',
+          password: 'Password123!',
+          tenantSlug: 'acme',
+        },
+        {},
+      ),
+    ).rejects.toThrow('Too many failed attempts');
+    // The correct password does not get through a lockout either.
+    expect(security.createSession).not.toHaveBeenCalled();
+  });
+
+  it('blocks an address the tenant has not allowed, before the password', async () => {
+    signedInUser();
+    security.policy.mockResolvedValue({
+      ...DEFAULT_POLICY,
+      ipAllowlist: ['203.0.113.0/24'],
+    });
+
+    await expect(
+      service.login(
+        {
+          email: 'admin@acme.com',
+          password: 'Password123!',
+          tenantSlug: 'acme',
+        },
+        { ipAddress: '8.8.8.8' },
+      ),
+    ).rejects.toThrow('not allowed from this network');
+    expect(security.lockout).not.toHaveBeenCalled();
+    expect(security.recordAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'ip_not_allowed' }),
+    );
+  });
+
+  it('lets an allowed address through', async () => {
+    signedInUser();
+    security.policy.mockResolvedValue({
+      ...DEFAULT_POLICY,
+      ipAllowlist: ['203.0.113.0/24'],
+    });
+
+    await expect(
+      service.login(
+        {
+          email: 'admin@acme.com',
+          password: 'Password123!',
+          tenantSlug: 'acme',
+        },
+        { ipAddress: '203.0.113.9' },
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  it('rotates the refresh token rather than reusing it', async () => {
+    jwt.verifyAsync.mockResolvedValue({ sub: 'u1' });
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'u1',
+      tenantId: 't1',
+      email: 'a@b.in',
+      firstName: 'A',
+      lastName: 'B',
+      role: Role.TENANT_ADMIN,
+      isActive: true,
+    });
+    security.liveSession.mockResolvedValue({ id: 's1' });
+
+    await service.refresh('old-token', { ipAddress: '1.2.3.4' });
+
+    expect(security.rotateSession).toHaveBeenCalledWith(
+      's1',
+      'signed-token',
+      '1.2.3.4',
+    );
+  });
+
+  it('refuses a refresh token that belongs to no live session', async () => {
+    jwt.verifyAsync.mockResolvedValue({ sub: 'u1' });
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'u1',
+      tenantId: 't1',
+      isActive: true,
+      refreshToken: null,
+    });
+    security.liveSession.mockResolvedValue(null);
+
+    await expect(service.refresh('stale')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('signs out one device, not all of them', async () => {
+    prisma.user.update.mockResolvedValue({});
+
+    await service.logout('u1', 'this-device-token');
+
+    expect(security.revokeByToken).toHaveBeenCalledWith(
+      'this-device-token',
+      'signed_out',
+    );
+  });
+
+  it('gives every issued token its own id', async () => {
+    signedInUser();
+    // Two sign-ins in the same second used to produce byte-identical tokens,
+    // and the second collided with the first on the session token hash.
+    await service.login(
+      { email: 'admin@acme.com', password: 'Password123!', tenantSlug: 'acme' },
+      {},
+    );
+    await service.login(
+      { email: 'admin@acme.com', password: 'Password123!', tenantSlug: 'acme' },
+      {},
+    );
+
+    const first = jwt.signAsync.mock.calls[0][0].jti;
+    const third = jwt.signAsync.mock.calls[2][0].jti;
+    expect(first).toEqual(expect.any(String));
+    expect(third).not.toBe(first);
   });
 });

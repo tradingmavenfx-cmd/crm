@@ -1247,3 +1247,57 @@ export interface SharedDocument {
   signedName: string | null;
   expiresAt: string | null;
 }
+
+// ── Security ───────────────────────────────────
+
+export interface UserSessionRow {
+  id: string;
+  device: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  revokedReason: string | null;
+}
+
+export interface SecurityPolicy {
+  ipAllowlist: string[];
+  maxFailedAttempts: number;
+  lockoutMinutes: number;
+  sessionDays: number;
+  loginRetentionDays: number | null;
+  auditRetentionDays: number | null;
+}
+
+export interface LoginAttemptRow {
+  id: string;
+  email: string;
+  success: boolean;
+  reason: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+}
+
+export interface AuditEntry {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+  by: string;
+  changes: { field: string; from: unknown; to: unknown }[];
+  metadata: Record<string, unknown>;
+}
+
+export interface ErasureReport {
+  email: string;
+  contacts: number;
+  leads: number;
+  messages: number;
+  formSubmissions: number;
+  portalSessions: number;
+  documentsSigned: number;
+}
