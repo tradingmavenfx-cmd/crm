@@ -8,7 +8,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
   /// The application connects as a role that cannot bypass row-level security
   url       = env("DATABASE_URL")
   /// Migrations connect as the owner, which can change the schema
@@ -95,6 +95,9 @@ model Tenant {
   documents          Document[]
   sessions           UserSession[]
   loginAttempts      LoginAttempt[]
+  apiKeys            ApiKey[]
+  webhooks           Webhook[]
+  webhookDeliveries  WebhookDelivery[]
   security           TenantSecurity?
   documentFolders    DocumentFolder[]
   documentVersions   DocumentVersion[]
@@ -165,6 +168,7 @@ model User {
   sessions              UserSession[]
   documentVersions      DocumentVersion[]  @relation("DocumentVersionAuthor")
   documentShares        DocumentShare[]    @relation("DocumentShareCreator")
+  apiKeys               ApiKey[]           @relation("ApiKeyCreator")
   assignedForms         MarketingForm[]    @relation("FormAssignee")
   forecastSnapshots     ForecastSnapshot[] @relation("ForecastOwner")
   badges                UserBadge[]
@@ -2303,4 +2307,105 @@ model TenantSecurity {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("tenant_security")
+}
+
+// -----------------------------------------------------------
+// Developer platform: API keys and outbound webhooks
+// -----------------------------------------------------------
+
+/// A credential for a program rather than a person.
+model ApiKey {
+  id       String @id @default(uuid())
+  tenantId String
+  name     String
+
+  /// The first characters of the key, kept so a key can be recognised in a
+  /// list. The rest is never stored.
+  prefix  String
+  /// SHA-256 of the whole key
+  keyHash String @unique
+
+  /// What it may do: "contacts:read", "deals:write", or "*" for everything
+  scopes String[] @default([])
+
+  rateLimitPerMinute Int @default(120)
+
+  lastUsedAt   DateTime?
+  lastUsedIp   String?
+  requestCount Int       @default(0)
+
+  expiresAt DateTime?
+  revokedAt DateTime?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("ApiKeyCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@map("api_keys")
+}
+
+/// Somewhere to send events as they happen.
+model Webhook {
+  id       String @id @default(uuid())
+  tenantId String
+  name     String
+  url      String
+
+  /// Which events to send, e.g. ["deal.won", "contact.created"]
+  events String[] @default([])
+
+  /// Signs every delivery. Held so it can sign; shown once, on creation.
+  secret String
+
+  isActive Boolean @default(true)
+
+  /// Health. A destination that keeps failing is switched off rather than
+  /// retried for ever.
+  consecutiveFailures Int       @default(0)
+  disabledAt          DateTime?
+  disabledReason      String?
+  lastDeliveryAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@index([tenantId, isActive])
+  @@map("webhooks")
+}
+
+/// One attempt to tell a destination that something happened. Kept so a
+/// delivery can be looked at, and replayed, after the fact.
+model WebhookDelivery {
+  id        String @id @default(uuid())
+  tenantId  String
+  webhookId String
+
+  event   String
+  payload Json
+
+  /// pending | delivered | failed
+  status   String @default("pending")
+  attempts Int    @default(0)
+
+  responseStatus Int?
+  responseBody   String?
+  error          String?
+
+  nextAttemptAt DateTime?
+  deliveredAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, webhookId, createdAt])
+  @@index([status, nextAttemptAt])
+  @@map("webhook_deliveries")
 }

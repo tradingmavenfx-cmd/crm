@@ -17,6 +17,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "db:setup-role": "ts-node prisma/setup-app-role.ts",
+    "db:reset": "prisma migrate reset --force && npm run db:setup-role && prisma db seed",
     "db:verify-rls": "ts-node prisma/verify-rls.ts",
     "prisma:seed": "prisma db seed",
     "prisma:studio": "prisma studio"

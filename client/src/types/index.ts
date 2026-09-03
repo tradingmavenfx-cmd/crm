@@ -1301,3 +1301,47 @@ export interface ErasureReport {
   portalSessions: number;
   documentsSigned: number;
 }
+
+// ── Developer platform ─────────────────────────
+
+export interface ApiKeyRow {
+  id: string;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  rateLimitPerMinute: number;
+  lastUsedAt: string | null;
+  lastUsedIp: string | null;
+  requestCount: number;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  createdBy: { firstName: string; lastName: string } | null;
+}
+
+export interface WebhookRow {
+  id: string;
+  name: string;
+  url: string;
+  events: string[];
+  isActive: boolean;
+  consecutiveFailures: number;
+  disabledAt: string | null;
+  disabledReason: string | null;
+  lastDeliveryAt: string | null;
+  createdAt: string;
+  _count: { deliveries: number };
+}
+
+export interface WebhookDeliveryRow {
+  id: string;
+  event: string;
+  status: string;
+  attempts: number;
+  responseStatus: number | null;
+  error: string | null;
+  nextAttemptAt: string | null;
+  deliveredAt: string | null;
+  createdAt: string;
+  webhook: { id: string; name: string } | null;
+}

@@ -25,10 +25,11 @@ Social posting, social inbox and social listening are **not** built: each
 network needs its own OAuth app and review, which is an integration project
 rather than a feature.
 
-**Phase 5 — Platform** is in progress: document management (5.1) and the
-security and compliance work (5.4) are built. The integration marketplace and
-developer platform (5.2) and enterprise administration and white labelling
-(5.3) are not.
+**Phase 5 — Platform** is in progress: document management (5.1), the developer
+platform (5.2 — API keys and webhooks) and the security and compliance work
+(5.4) are built. Enterprise administration and white labelling (5.3) is not,
+and neither are the native integrations, which need a reviewed OAuth app per
+vendor.
 
 - [x] Monorepo scaffolding
 - [x] NestJS backend foundation (config, Prisma, global guards, Swagger)
@@ -453,7 +454,10 @@ sit on a dashboard next to pipeline and campaign figures.
       contract expiry alerts
 - [ ] 5.1 rest — OCR (needs an OCR engine), and integration with a certified
       e-signature provider
-- [ ] 5.2 Integration marketplace & developer platform
+- [x] 5.2 Developer platform — scoped API keys with rate limiting, signed
+      outbound webhooks with retries and replay, OpenAPI reference
+- [ ] 5.2 rest — native integrations, GraphQL, published SDKs, a low-code app
+      builder and a paid marketplace
 - [ ] 5.3 Enterprise administration & white labelling
 - [x] 5.4 Security — multi-device sessions with rotation, sign-in history,
       brute-force lockout, per-tenant IP allowlist, audit trail with field
@@ -465,6 +469,54 @@ sit on a dashboard next to pipeline and campaign figures.
 - [ ] 5.4 rest — certifications (SOC 2, ISO 27001, HIPAA), WAF, penetration
       testing, data residency, backups and disaster recovery: operational and
       infrastructure work rather than application code
+
+### Developer platform
+
+**API keys authenticate a program**, sent as `X-API-Key` or as
+`Authorization: Bearer crm_…`. A key is returned once and stored only as a
+SHA-256 hash with its first characters kept, so it can be recognised in a list
+and nowhere else. Unknown, revoked and expired keys all give the same answer.
+
+**Scopes are enforced, not decorative.** The scope a request needs is worked
+out from the request itself — the first path segment plus `read` for GET and
+`write` for anything else — so every route is covered without each one having
+to remember to declare something. `contacts:*` covers every action on
+contacts, and writing implies reading, because a key that may change a contact
+may obviously see it. It is coarse on purpose: a permission model nobody can
+predict is worse than a simple one.
+
+**A key can never be used on `/auth` or `/security`**, whatever scopes it
+holds. Signing in, exporting a workspace and erasing a person are things a
+person does with a session, not something a credential left in a script should
+reach.
+
+Rate limiting is per key and **per process** — two instances behind a load
+balancer allow twice the number. Said plainly rather than implied; a shared
+counter needs a store this project does not have yet.
+
+**Webhooks reuse the events the workflow engine already emits** rather than
+adding a second set of emissions across every module. Every delivery is signed:
+`X-CRM-Signature` is an HMAC-SHA256 of `timestamp.body`, and the timestamp is
+signed *with* the body so a captured delivery cannot be replayed later — a
+receiver should reject anything that is not recent.
+
+A failed delivery is retried five times with widening gaps (30s, 2m, 8m, 32m),
+and a destination that fails fifteen times in a row is switched off rather than
+retried for ever; turning it back on clears the strikes, so it is judged on
+behaviour rather than history. Replaying writes a **new** delivery rather than
+rewriting the old one, because what happened the first time is part of the
+record. A dispatch failure can never escape into the operation that caused it —
+a webhook is a courtesy to somebody else's system.
+
+**Not built, and why:** native integrations (Google, Microsoft, Slack,
+QuickBooks, Razorpay, Shopify…) each need their own OAuth app and vendor
+review, which is an integration project per vendor rather than a feature.
+GraphQL would be a second complete API surface alongside a finished REST one.
+SDKs are better generated from the OpenAPI document at `/api/docs` than
+hand-written and left to drift. A low-code app builder and server-side custom
+functions mean running tenant-supplied code, which needs a real sandbox — an
+isolate or a container per execution — and is a project in its own right, not a
+feature to bolt on.
 
 ### Security
 

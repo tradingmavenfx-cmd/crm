@@ -31,6 +31,7 @@ import { SalesModule } from './modules/sales/sales.module';
 import { MarketingModule } from './modules/marketing/marketing.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { SecurityModule } from './modules/security/security.module';
+import { DeveloperModule } from './modules/developer/developer.module';
 import { VoiceModule } from './modules/voice/voice.module';
 import { InboxModule } from './modules/inbox/inbox.module';
 import { HealthController } from './modules/health/health.controller';
@@ -78,6 +79,7 @@ import { TenantScopeInterceptor } from './common/interceptors/tenant-scope.inter
     MarketingModule,
     DocumentsModule,
     SecurityModule,
+    DeveloperModule,
   ],
   controllers: [HealthController],
   providers: [
