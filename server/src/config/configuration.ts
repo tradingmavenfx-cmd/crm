@@ -21,6 +21,14 @@ export interface AppConfig {
     // Override for an OpenAI-compatible endpoint
     baseUrl: string;
   };
+  documents: {
+    /// Where the local storage driver keeps document bytes
+    storagePath: string;
+    /// Largest upload accepted, in megabytes
+    maxUploadMb: number;
+    /// Warn this many days before a contract expires
+    expiryWarningDays: number;
+  };
   jwt: {
     accessSecret: string;
     accessExpiresIn: string;
@@ -93,6 +101,14 @@ export default (): AppConfig => ({
     apiKey: process.env.OPENAI_API_KEY ?? '',
     model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
     baseUrl: process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1',
+  },
+  documents: {
+    storagePath: process.env.DOCUMENT_STORAGE_PATH ?? 'storage/documents',
+    maxUploadMb: parseInt(process.env.DOCUMENT_MAX_UPLOAD_MB ?? '25', 10),
+    expiryWarningDays: parseInt(
+      process.env.DOCUMENT_EXPIRY_WARNING_DAYS ?? '30',
+      10,
+    ),
   },
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET ?? 'dev-access-secret',

@@ -25,6 +25,10 @@ Social posting, social inbox and social listening are **not** built: each
 network needs its own OAuth app and review, which is an integration project
 rather than a feature.
 
+**Phase 5 — Platform** has started: document management (5.1) is built. The
+integration marketplace and developer platform (5.2), enterprise administration
+and white labelling (5.3) and the security and compliance work (5.4) are not.
+
 - [x] Monorepo scaffolding
 - [x] NestJS backend foundation (config, Prisma, global guards, Swagger)
 - [x] Prisma schema + multi-tenancy (tenant-scoped, RLS-ready)
@@ -440,6 +444,56 @@ unreachable while the ticket is still open, and accepts exactly one rating.
 Ticket data also feeds the reports engine: `service.tickets` and
 `service.ticket_agents` join the catalogue, so ticket load and SLA compliance
 sit on a dashboard next to pipeline and campaign figures.
+
+## Phase 5 — Platform (in progress)
+
+- [x] 5.1 Document management — folders, tags, versions, templates with merge
+      fields, secure share links, acceptance records, view/download analytics,
+      contract expiry alerts
+- [ ] 5.1 rest — OCR (needs an OCR engine), and integration with a certified
+      e-signature provider
+- [ ] 5.2 Integration marketplace & developer platform
+- [ ] 5.3 Enterprise administration & white labelling
+- [ ] 5.4 Security & compliance
+
+### Documents
+
+Bytes go through a **storage driver** — put, get, delete and nothing else — so
+an object store can replace the local disk without the rest of the module
+noticing. The local driver **generates every key itself** and never takes one
+from the caller: a filename that walked out of the storage root
+(`../../../etc/passwd`) would otherwise be able to read or overwrite anything
+the process can reach. Keys are tenant-prefixed and random, so a stored name
+gives nothing away, and every read is checked to be inside the directory the
+driver owns even if a database row were tampered with.
+
+**Every version is its own stored object.** Uploading a new one leaves the old
+bytes where they are, because an earlier version has to stay downloadable — and
+because a share may be pinned to it. Deleting a document removes *every*
+version's bytes, not just the newest; leaving the rest behind would keep the
+file readable to anyone who could reach the disk.
+
+**A share link is pinned to the version that existed when it was made**, so a
+later edit cannot change what a customer was sent. Links are addressed by an
+unguessable token, are revocable and can expire; revoked, expired and
+never-existed all look identical from outside. The token is shown once, to
+whoever made the link.
+
+A share can ask for a name before it hands the file over. That is an
+**acceptance record** — a name, an optional email, the time and the IP — and
+deliberately **not** a certified electronic signature: it says somebody holding
+the link put their name to this version, it does not certify who they were.
+
+Documents generated from a template leave a merge field with nothing behind it
+**visible** as `[contact.jobTitle]`, and name the unfilled fields back to
+whoever generated it. A contract that silently reads "Agreement with  " is
+worse than one that shows the hole.
+
+Contracts carry an expiry date, and a daily sweep flags each one **once** so an
+expiry is noticed rather than repeated every morning.
+
+**Not built:** OCR, which needs an OCR engine, and integration with a certified
+e-signature provider.
 
 ### Leads, capture and attribution
 
