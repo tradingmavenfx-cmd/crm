@@ -995,3 +995,161 @@ export interface BadgeDefinition {
     user: { id: string; firstName: string; lastName: string };
   }[];
 }
+
+// ── Marketing ──────────────────────────────────
+
+export type LeadStatusValue =
+  | 'NEW'
+  | 'WORKING'
+  | 'NURTURING'
+  | 'QUALIFIED'
+  | 'CONVERTED'
+  | 'DISQUALIFIED';
+
+export interface Lead {
+  id: string;
+  firstName: string;
+  lastName: string | null;
+  email: string | null;
+  phone: string | null;
+  company: string | null;
+  jobTitle: string | null;
+  status: LeadStatusValue;
+  score: number;
+  source: string | null;
+  sourceDetail: string | null;
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
+  createdAt: string;
+  convertedContactId: string | null;
+  convertedDealId: string | null;
+  owner: { id: string; firstName: string; lastName: string } | null;
+  _count?: { touchpoints: number };
+}
+
+export interface LeadDetail extends Lead {
+  factors: { label: string; points: number }[];
+  touchpoints: {
+    id: string;
+    type: string;
+    occurredAt: string;
+    detail: Record<string, unknown>;
+    campaign: { id: string; name: string } | null;
+    page: { id: string; title: string; slug: string } | null;
+  }[];
+}
+
+export interface FormField {
+  name: string;
+  label: string;
+  type: string;
+  required?: boolean;
+}
+
+export interface MarketingForm {
+  id: string;
+  name: string;
+  fields: FormField[];
+  thankYou: string;
+  assignTo: { id: string; firstName: string; lastName: string } | null;
+  _count: { submissions: number; pages: number };
+}
+
+export interface PageBlock {
+  type: 'heading' | 'text' | 'image' | 'form' | 'button';
+  text?: string;
+  src?: string;
+  alt?: string;
+  href?: string;
+}
+
+export type PageStatusValue = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+
+export interface LandingPage {
+  id: string;
+  slug: string;
+  title: string;
+  status: PageStatusValue;
+  blocks: PageBlock[];
+  metaTitle: string | null;
+  metaDescription: string | null;
+  variantOfId: string | null;
+  variantWeight: number;
+  views: number;
+  submissions: number;
+  form: { id: string; name: string } | null;
+  variantOf: { id: string; title: string } | null;
+  _count?: { variants: number };
+}
+
+export interface PageStat {
+  id: string;
+  slug: string;
+  title: string;
+  status: PageStatusValue;
+  views: number;
+  submissions: number;
+  variantOfId: string | null;
+  conversionRate: number;
+}
+
+export interface AttributionReport {
+  model: string;
+  wonRevenue: number;
+  creditedRevenue: number;
+  uncreditedRevenue: number;
+  rows: {
+    key: string;
+    kind: string;
+    label: string;
+    revenue: number;
+    deals: number;
+  }[];
+}
+
+export interface CampaignRoi {
+  model: string;
+  rows: {
+    id: string;
+    name: string;
+    channel: string;
+    status: string;
+    cost: number;
+    currency: string;
+    audience: number;
+    sent: number;
+    opened: number;
+    clicked: number;
+    revenue: number;
+    roi: number | null;
+    costPerSend: number | null;
+  }[];
+}
+
+export interface FunnelStep {
+  step: string;
+  count: number;
+  ofTotal: number;
+  dropOff: number;
+}
+
+export interface LeadSourceRow {
+  source: string;
+  leads: number;
+  converted: number;
+  conversionRate: number;
+  averageScore: number;
+}
+
+/** What the public landing page endpoint returns */
+export interface PublicPage {
+  variantId: string;
+  slug: string;
+  title: string;
+  metaTitle: string;
+  metaDescription: string | null;
+  blocks: PageBlock[];
+  tenant: { name: string };
+  form: { id: string; fields: FormField[]; thankYou: string } | null;
+}

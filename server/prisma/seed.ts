@@ -14,6 +14,7 @@ async function main(): Promise<void> {
     // existing database still gets the IVR/SMS demo content.
     await seedTelephonyAndSms(existing.id);
     await seedSalesCloud(existing.id);
+    await seedMarketing(existing.id);
     // eslint-disable-next-line no-console
     console.log('✅ Demo tenant already seeded — newer modules topped up.');
     return;
@@ -124,6 +125,7 @@ async function main(): Promise<void> {
   });
 
   await seedSalesCloud(tenant.id);
+  await seedMarketing(tenant.id);
   await seedTelephonyAndSms(tenant.id);
 
   // eslint-disable-next-line no-console
@@ -330,6 +332,132 @@ async function seedSalesCloud(tenantId: string): Promise<void> {
       prize: 'Team dinner',
     },
   });
+}
+
+/**
+ * A capture form, a published landing page and a couple of leads (Phase 4.2),
+ * so attribution and the funnel have something to be about.
+ */
+async function seedMarketing(tenantId: string): Promise<void> {
+  const rep = await prisma.user.findFirst({
+    where: { tenantId, email: 'rep@acme.com' },
+  });
+
+  // A campaign with a spend against it, so the ROI report has something to be
+  // about once it has been sent. Guarded on its own count, so a tenant seeded
+  // before this existed still gets it.
+  const campaignCount = await prisma.campaign.count({ where: { tenantId } });
+  if (campaignCount === 0) {
+    await prisma.campaign.create({
+      data: {
+        tenantId,
+        name: 'Q3 demo push',
+        channel: 'EMAIL',
+        subject: 'A CRM your team will actually use, {{firstName}}',
+        body: '<p>Hello {{firstName}},</p><p>We are running 30-minute walkthroughs this month. Reply and we will book one in.</p>',
+        cost: '25000',
+        createdById: rep?.id,
+        segment: {},
+      },
+    });
+  }
+
+  const existing = await prisma.marketingForm.count({ where: { tenantId } });
+  if (existing > 0) return;
+
+  const form = await prisma.marketingForm.create({
+    data: {
+      tenantId,
+      name: 'Book a demo',
+      assignToId: rep?.id,
+      thankYou: 'Thanks - we will call you within one working day.',
+      fields: [
+        { name: 'firstName', label: 'First name', type: 'text', required: true },
+        { name: 'email', label: 'Work email', type: 'email', required: true },
+        { name: 'company', label: 'Company', type: 'text', required: false },
+        { name: 'jobTitle', label: 'Your role', type: 'text', required: false },
+        { name: 'seats', label: 'How many seats?', type: 'text', required: false },
+      ],
+    },
+  });
+
+  await prisma.landingPage.create({
+    data: {
+      tenantId,
+      slug: 'crm-demo',
+      title: 'See the CRM your team will actually use',
+      status: 'PUBLISHED',
+      publishedAt: new Date(),
+      formId: form.id,
+      metaTitle: 'Book a CRM demo | Acme Corp',
+      metaDescription:
+        'Calls, WhatsApp, email and tickets in one place. Book a 30-minute demo.',
+      blocks: [
+        { type: 'heading', text: 'See the CRM your team will actually use' },
+        {
+          type: 'text',
+          text: 'Calls, WhatsApp, email and support tickets in one inbox, with the pipeline attached. Book a 30-minute walkthrough and we will use your own numbers.',
+        },
+        { type: 'form' },
+      ],
+    },
+  });
+
+  // A second version of the same page, to test the headline against.
+  const source = await prisma.landingPage.findFirst({
+    where: { tenantId, slug: 'crm-demo' },
+  });
+  if (source) {
+    await prisma.landingPage.create({
+      data: {
+        tenantId,
+        slug: 'crm-demo-b',
+        title: 'Stop losing deals in your inbox',
+        status: 'PUBLISHED',
+        publishedAt: new Date(),
+        formId: form.id,
+        variantOfId: source.id,
+        variantWeight: 50,
+        blocks: [
+          { type: 'heading', text: 'Stop losing deals in your inbox' },
+          {
+            type: 'text',
+            text: 'Every call, message and ticket against the right deal. Book a 30-minute walkthrough.',
+          },
+          { type: 'form' },
+        ],
+      },
+    });
+  }
+
+  await prisma.lead.createMany({
+    data: [
+      {
+        tenantId,
+        firstName: 'Arjun',
+        lastName: 'Mehta',
+        email: 'arjun@initech.in',
+        company: 'Initech Systems',
+        jobTitle: 'Head of Sales',
+        source: 'landing_page',
+        sourceDetail: 'crm-demo',
+        utmSource: 'google',
+        utmMedium: 'cpc',
+        score: 80,
+        ownerId: rep?.id,
+      },
+      {
+        tenantId,
+        firstName: 'Neha',
+        email: 'neha@gmail.com',
+        source: 'web_form',
+        score: 30,
+        status: 'NURTURING',
+        ownerId: rep?.id,
+      },
+    ],
+  });
+
 }
 
 /**

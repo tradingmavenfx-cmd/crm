@@ -18,9 +18,12 @@ See [`implementation_plan.md`](./implementation_plan.md) for the full 6-phase ro
 Phases 1 and 2 are complete, apart from the Phase 2 features that depend on an
 LLM or on WebRTC — those moved to Phase 3 alongside the rest of the AI work.
 Phase 3 — Intelligence & Automation — is complete. **Phase 4 — Advanced Sales
-& Marketing** is in progress: Sales Cloud (4.1) and all of Service Cloud (4.3 —
-ticketing, knowledge base and customer portal) are built; Marketing Cloud (4.2)
-is not.
+& Marketing** is complete apart from social media: Sales Cloud (4.1), Marketing
+Cloud (4.2 — leads, landing pages, forms, attribution and campaign ROI) and
+Service Cloud (4.3 — ticketing, knowledge base and customer portal) are built.
+Social posting, social inbox and social listening are **not** built: each
+network needs its own OAuth app and review, which is an integration project
+rather than a feature.
 
 - [x] Monorepo scaffolding
 - [x] NestJS backend foundation (config, Prisma, global guards, Swagger)
@@ -349,8 +352,14 @@ solve with whitelisted dimensions instead.
 - [x] 4.1 Territories — nested, rule-based auto-assignment, rolled-up
       performance
 - [x] 4.1 Gamification — leaderboards, contests, badges
-- [ ] 4.2 Marketing Cloud — visual email builder, landing pages, social, lead
-      management
+- [x] 4.2 Lead management — capture, scoring, routing, conversion to
+      contact/account/deal, source and UTM tracking
+- [x] 4.2 Landing pages & forms — block-built pages, A/B variants, SEO fields,
+      public capture endpoint
+- [x] 4.2 Marketing analytics — first/last/linear attribution, campaign ROI,
+      funnel, source performance
+- [ ] 4.2 Social media — posting, social inbox and listening (needs a
+      reviewed OAuth app per network)
 - [x] 4.3 Service Cloud ticketing — multi-channel intake, auto-categorisation,
       SLA policies with escalation, routing, merge/link, CSAT
 - [x] 4.3 Knowledge base — versioned articles, public help centre, multilingual
@@ -431,6 +440,53 @@ unreachable while the ticket is still open, and accepts exactly one rating.
 Ticket data also feeds the reports engine: `service.tickets` and
 `service.ticket_agents` join the catalogue, so ticket load and SLA compliance
 sit on a dashboard next to pipeline and campaign figures.
+
+### Leads, capture and attribution
+
+A lead is scored the same way everything else in this codebase is scored: a
+handful of **stated reasons that add up**, so a rep can be told why a lead is
+worth calling. A work address beats a free one, seniority in a job title
+counts, and somebody who came to a page of ours beats somebody who arrived in
+an import.
+
+**Somebody who comes back is one lead, not two.** A second submission from the
+same address updates what is known and adds a touchpoint. Crucially the **first
+touch is kept**: what brought them the first time is the thing that worked, and
+overwriting it with the second visit's UTM would erase that.
+
+Converting creates a contact, an account (reusing one of the same name) and
+optionally a deal. **The lead row is kept, not deleted** — it is the record of
+where the customer came from — and its touchpoints are re-pointed at the new
+contact so the trail follows the person rather than stopping at the moment they
+became one.
+
+**Attribution is worked out from touchpoints**, not from a single `source`
+field that only ever holds whichever touch was written last. A campaign send,
+an email open, a click, a page view and a form submission all record one.
+Three models are offered because they disagree, and the disagreement is the
+useful part: first-touch flatters whatever fills the funnel, last-touch
+flatters whatever closes, linear refuses to choose. **Only won deals count**,
+and **revenue no marketing touch can explain is reported as uncredited** rather
+than dropped — saying so is the difference between attribution and wishful
+thinking. Campaign ROI is computed from that same split, so the two reports can
+never tell different stories.
+
+### Landing pages
+
+A page is a list of blocks — the same data a drag-and-drop editor would
+produce, edited as a list. Publishing needs at least one block, and a draft is
+unreachable publicly.
+
+A page can carry an **A/B variant**: the API picks between them by weight *per
+view* and returns the id of the variant it actually served, so the form posts
+back against the one the visitor saw. That keeps each side's views and
+submissions honest, which is the only way a conversion rate means anything.
+Both sides share one form — they test the wording, not the questions.
+
+`POST /api/p/:tenantId/capture` takes a lead straight from an external site for
+people who would rather host their own page. Neither it nor the form endpoint
+hands back a CRM id: an open endpoint has no business distributing references
+to records.
 
 ### Forecasting, quotas and territories
 
