@@ -32,6 +32,7 @@ const nav = [
   { href: '/email-templates', label: 'Email Templates' },
   { href: '/sms-templates', label: 'SMS Templates' },
   { href: '/security', label: 'Security' },
+  { href: '/developer', label: 'Developer' },
 ];
 
 export function Sidebar() {

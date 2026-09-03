@@ -25,9 +25,20 @@ async function bootstrap(): Promise<void> {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Enterprise CRM Pro API')
-    .setDescription('Phase 1 - Foundation & Core')
+    .setDescription(
+      [
+        'Two ways to authenticate:',
+        '',
+        '- **Bearer token** — a signed-in person, from `POST /api/auth/login`.',
+        '- **API key** — a program, in `X-API-Key` or as `Authorization: Bearer crm_…`.',
+        '  A key carries scopes (`contacts:read`, `deals:write`, `*`); the scope needed',
+        '  for a request is its first path segment plus `read` for GET and `write` for',
+        '  anything else. Keys cannot be used on `/auth` or `/security`.',
+      ].join('\n'),
+    )
     .setVersion('0.1.0')
     .addBearerAuth()
+    .addApiKey({ type: 'apiKey', name: 'X-API-Key', in: 'header' }, 'api-key')
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api/docs', app, document);
