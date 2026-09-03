@@ -842,3 +842,156 @@ export interface HelpArticle {
   notHelpfulCount: number;
   updatedAt: string;
 }
+
+// ── Territories, forecasting, gamification ─────
+
+export interface TerritoryRules {
+  countries?: string[];
+  states?: string[];
+  cities?: string[];
+  industries?: string[];
+  domains?: string[];
+  minEmployees?: number;
+  maxEmployees?: number;
+}
+
+export interface Territory {
+  id: string;
+  name: string;
+  description: string | null;
+  parentId: string | null;
+  isActive: boolean;
+  rules: TerritoryRules;
+  manager: { id: string; firstName: string; lastName: string } | null;
+  members: { user: { id: string; firstName: string; lastName: string } }[];
+  _count: { companies: number; children: number };
+}
+
+export interface TerritoryPerformance {
+  id: string;
+  name: string;
+  parentId: string | null;
+  accounts: number;
+  deals: number;
+  won: number;
+  open: number;
+  lost: number;
+  winRate: number;
+}
+
+export type QuotaPeriodValue = 'MONTH' | 'QUARTER' | 'YEAR';
+
+export interface Quota {
+  id: string;
+  period: QuotaPeriodValue;
+  periodStart: string;
+  amount: string;
+  currency: string;
+  owner: { id: string; firstName: string; lastName: string } | null;
+  territory: { id: string; name: string } | null;
+}
+
+export interface ForecastRow {
+  ownerId: string | null;
+  owner: string;
+  quota: number;
+  closed: number;
+  commit: number;
+  bestCase: number;
+  pipeline: number;
+  omitted: number;
+  weighted: number;
+  deals: number;
+  attainment: number | null;
+  gap: number | null;
+  projected?: number;
+  projectedAttainment?: number | null;
+}
+
+export interface Forecast {
+  period: QuotaPeriodValue;
+  periodStart: string;
+  periodEnd: string;
+  rows: ForecastRow[];
+  total: {
+    quota: number;
+    closed: number;
+    commit: number;
+    bestCase: number;
+    pipeline: number;
+    weighted: number;
+    deals: number;
+    projected?: number;
+    projectedAttainment?: number | null;
+    shortfall?: number | null;
+  };
+  dealsWithoutExpectedDate: number;
+  odds?: { commit: number; bestCase: number; pipeline: number };
+}
+
+export interface ForecastAccuracy {
+  owner: string;
+  periodStart: string;
+  period: QuotaPeriodValue;
+  takenAt: string;
+  called: number;
+  actual: number;
+  accuracy: number | null;
+}
+
+export type ContestMetricValue =
+  | 'REVENUE_WON'
+  | 'DEALS_WON'
+  | 'CALLS_MADE'
+  | 'MEETINGS_HELD'
+  | 'TICKETS_RESOLVED';
+
+export interface LeaderboardRow {
+  rank: number;
+  userId: string;
+  name: string;
+  revenueWon: number;
+  dealsWon: number;
+  callsMade: number;
+  meetingsHeld: number;
+  ticketsResolved: number;
+  points: number;
+  value?: number;
+}
+
+export interface Leaderboard {
+  from: string;
+  to: string | null;
+  metric: ContestMetricValue | null;
+  rows: LeaderboardRow[];
+}
+
+export interface Contest {
+  id: string;
+  name: string;
+  metric: ContestMetricValue;
+  startsAt: string;
+  endsAt: string;
+  prize: string | null;
+}
+
+export interface ContestStandings {
+  contest: Contest;
+  running: boolean;
+  rows: { rank: number; userId: string; name: string; value: number }[];
+}
+
+export interface BadgeDefinition {
+  id: string;
+  key: string;
+  name: string;
+  description: string;
+  icon: string;
+  metric: ContestMetricValue;
+  threshold: string;
+  earned: {
+    earnedAt: string;
+    value: string;
+    user: { id: string; firstName: string; lastName: string };
+  }[];
+}

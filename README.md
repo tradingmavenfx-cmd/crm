@@ -18,9 +18,9 @@ See [`implementation_plan.md`](./implementation_plan.md) for the full 6-phase ro
 Phases 1 and 2 are complete, apart from the Phase 2 features that depend on an
 LLM or on WebRTC — those moved to Phase 3 alongside the rest of the AI work.
 Phase 3 — Intelligence & Automation — is complete. **Phase 4 — Advanced Sales
-& Marketing** is in progress: CPQ (4.1) and all of Service Cloud (4.3 —
-ticketing, knowledge base and customer portal) are built; the rest of Sales
-Cloud and Marketing Cloud (4.2) are not.
+& Marketing** is in progress: Sales Cloud (4.1) and all of Service Cloud (4.3 —
+ticketing, knowledge base and customer portal) are built; Marketing Cloud (4.2)
+is not.
 
 - [x] Monorepo scaffolding
 - [x] NestJS backend foundation (config, Prisma, global guards, Swagger)
@@ -344,8 +344,11 @@ solve with whitelisted dimensions instead.
 
 - [x] 4.1 CPQ — product catalogue, price books, quotes with discount approval,
       customer-facing acceptance, quote-to-invoice
-- [ ] 4.1 rest — AI revenue forecasting, quota management, territories,
-      gamification
+- [x] 4.1 Forecasting & quotas — commit/best-case/pipeline, weighted pipeline,
+      what-if modelling, snapshots and accuracy scoring
+- [x] 4.1 Territories — nested, rule-based auto-assignment, rolled-up
+      performance
+- [x] 4.1 Gamification — leaderboards, contests, badges
 - [ ] 4.2 Marketing Cloud — visual email builder, landing pages, social, lead
       management
 - [x] 4.3 Service Cloud ticketing — multi-channel intake, auto-categorisation,
@@ -428,6 +431,53 @@ unreachable while the ticket is still open, and accepts exactly one rating.
 Ticket data also feeds the reports engine: `service.tickets` and
 `service.ticket_agents` join the catalogue, so ticket load and SLA compliance
 sit on a dashboard next to pipeline and campaign figures.
+
+### Forecasting, quotas and territories
+
+A deal lands in a forecast category — commit, best case, pipeline — either
+because a rep put it there or, when nobody has said, from **its stage's own
+probability**, which is the number the pipeline was already built on rather
+than a second opinion invented for the forecast.
+
+**A deal counts towards the period it is expected to close in**, and an open
+deal with no expected date is reported separately rather than being quietly
+forecast into the current one. **Gap is measured against what is committed**
+(closed + commit), not against hope.
+
+A rep who carries a quota but has nothing in the period still appears, at zero:
+that is exactly the rep a manager is looking for. Rep quotas and a territory
+quota are never added together — they cover the same deals, so summing both
+would count the target twice.
+
+**What-if changes nothing.** It re-reads the same deals under different odds
+(90/50/20 by default) and answers "what would it take", which is a question
+about the numbers, not a change to them.
+
+Accuracy is scored against the **earliest** snapshot in a period — a forecast
+made on the last day of the quarter is not a forecast, and grading against it
+would flatter everyone. A weekly cron takes the snapshots so there is something
+to score.
+
+**Territories nest, and every clause in a rule must match**: "manufacturing in
+Karnataka" does not swallow every company in Karnataka. When several territories
+fit, the most specific one — the one with the most clauses — wins. Only accounts
+that belong nowhere are filed automatically, so an account moved by hand stays
+put; accounts no rule claimed are counted and reported rather than hidden.
+Performance rolls up through the tree, because a region reporting only its own
+directly-held accounts tells a manager nothing.
+
+### Leaderboards, contests and badges
+
+**Points are never banked.** They are worked out from the deals, activities and
+tickets every time the board is asked for, so a deal that later falls through
+takes its points with it — ₹1,000 won is 1 point, a won deal 50, a meeting 5, a
+resolved ticket 3, a call 2. Everyone stays on the board including those at
+zero: a board that hides the bottom half is a highlight reel, not a standing.
+
+A contest is scored on one metric over exactly its own window. A badge is the
+exception to nothing-is-banked: it is a record that somebody reached a mark, so
+it is written down once, with the figure that earned it, and survives a later
+bad quarter.
 
 ### Knowledge base and help centre
 
