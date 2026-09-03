@@ -32,7 +32,7 @@ developer platform (5.2) and enterprise administration and white labelling
 
 - [x] Monorepo scaffolding
 - [x] NestJS backend foundation (config, Prisma, global guards, Swagger)
-- [x] Prisma schema + multi-tenancy (tenant-scoped, RLS-ready)
+- [x] Prisma schema + multi-tenancy (tenant-scoped, enforced by Postgres RLS)
 - [x] Authentication & RBAC (JWT access/refresh, 6 roles, token rotation)
 - [x] Core CRM: Contacts (tenant-scoped CRUD + search + pagination)
 - [x] Core CRM: Companies (tenant-scoped CRUD + search + pagination)
@@ -460,6 +460,8 @@ sit on a dashboard next to pipeline and campaign figures.
       changes, retention policies
 - [x] 5.4 Compliance — full workspace export, subject access export, right to
       erasure
+- [x] 5.4 Tenant isolation — Postgres row-level security on every tenant-scoped
+      table, enforced through a non-superuser role
 - [ ] 5.4 rest — certifications (SOC 2, ISO 27001, HIPAA), WAF, penetration
       testing, data residency, backups and disaster recovery: operational and
       infrastructure work rather than application code
@@ -535,12 +537,64 @@ those columns are searched case-insensitively throughout the product, and
 encrypting them would break lookup — at-rest encryption for them belongs to the
 database and its volume.
 
-**Still a known gap:** tenant isolation is enforced in application code — every
-query is scoped by `tenantId` — and not by Postgres row-level security. A query
-that forgot the scope would not be stopped by the database. Closing that
-properly needs per-request session variables and a non-owner database role, and
-re-verifying every module against it; it is deliberately its own piece of work
-rather than half-done here.
+### Tenant isolation
+
+Isolation is enforced by **Postgres row-level security**, not by remembering to
+write `tenantId` in every query. All 73 tenant-scoped tables carry a policy
+that admits a row only when it belongs to the tenant the connection has
+declared, and the policies are `FORCE`d so the table owner is subject to them
+too.
+
+The connection declares its tenant per query. Prisma hands out pooled
+connections, so a session-level `SET` would leak to whoever borrowed the
+connection next; instead every operation runs as a two-statement transaction
+that does `set_config(..., TRUE)` first — transaction-local, and therefore
+correct under a pool. It costs a round trip per query and buys a guarantee that
+no amount of care in application code can give you.
+
+**The application connects as a role that cannot bypass RLS.** This is the half
+that is easy to miss: a superuser — and any role with `BYPASSRLS` — ignores
+policies outright, so connecting as `postgres` turns every policy in the schema
+into decoration. `npm run db:setup-role` creates `crm_app` as
+`NOSUPERUSER NOBYPASSRLS`; `DATABASE_URL` points at it and `DIRECT_DATABASE_URL`
+stays on the owner for migrations. The service **checks this at startup** and
+logs an error if the connection can bypass RLS, because that is exactly the
+kind of misconfiguration that is invisible until it matters.
+
+Cross-tenant work is explicit and greppable: `TenantContext.asSystem(reason,
+…)`, used for signing in (the workspace is not known yet), token-addressed
+public pages, scheduled sweeps and the seed. A signed-in HTTP request is pinned
+to the tenant in its token by an interceptor; a `@Public()` route runs in system
+mode and does its own scoping, which makes those routes the ones to read
+carefully.
+
+`npm run db:verify-rls` proves it, by running queries that deliberately omit
+`tenantId`:
+
+```
+As Acme, running queries that FORGOT their tenantId:
+  contacts visible                                     3
+  any of them belong to the other workspace?           no
+  the other workspace's contact, fetched by email      not found
+  workspaces visible                                   1
+  deals counted as Acme                                6
+  deals that exist in total                            7
+  count is scoped?                                     yes
+
+Writing into another workspace, as Acme:
+  insert into the other workspace     refused by the row-level security policy
+  update of the other workspace's row                  no rows
+  delete of the other workspace's row                  no rows
+```
+
+Two things nearly made this silently useless, and both are worth knowing about:
+the superuser connection above, and an **async-context bug** — a Prisma call
+returns a lazy promise that does no work until awaited, so handing one back out
+of the scope left it to run under whatever scope was in force at the `await`.
+A nested `asSystem` kept the outer tenant's scope, and an interceptor that
+returned `next.handle()` from inside the context scoped nothing at all, because
+an Observable does nothing until something subscribes. Both are pinned by
+tests.
 
 ### Documents
 

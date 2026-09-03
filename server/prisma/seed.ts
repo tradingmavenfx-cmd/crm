@@ -1,7 +1,18 @@
 import { PrismaClient, Role, ActivityType } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
+/**
+ * Seeding creates data across workspaces before any of them exist to be scoped
+ * to, so it connects as the owner rather than as the application's role, which
+ * row-level security would — correctly — refuse.
+ */
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.DIRECT_DATABASE_URL ?? process.env.DATABASE_URL,
+    },
+  },
+});
 
 async function main(): Promise<void> {
   const slug = 'acme';
