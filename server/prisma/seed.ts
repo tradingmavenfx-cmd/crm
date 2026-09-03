@@ -13,8 +13,9 @@ async function main(): Promise<void> {
     // Core data is left untouched, but newer modules top themselves up so an
     // existing database still gets the IVR/SMS demo content.
     await seedTelephonyAndSms(existing.id);
+    await seedSalesCloud(existing.id);
     // eslint-disable-next-line no-console
-    console.log('✅ Demo tenant already seeded — telephony/SMS demo data checked.');
+    console.log('✅ Demo tenant already seeded — newer modules topped up.');
     return;
   }
 
@@ -122,6 +123,7 @@ async function main(): Promise<void> {
     },
   });
 
+  await seedSalesCloud(tenant.id);
   await seedTelephonyAndSms(tenant.id);
 
   // eslint-disable-next-line no-console
@@ -130,6 +132,204 @@ async function main(): Promise<void> {
   console.log('   Tenant slug: acme');
   // eslint-disable-next-line no-console
   console.log('   Login: admin@acme.com / rep@acme.com  (password: Password123!)');
+}
+
+/**
+ * Territories, quotas, a pipeline spread over several reps and dates, plus
+ * badges (Phase 4.1). A forecast built from one deal shows nothing, so this
+ * gives the numbers something to be about.
+ */
+async function seedSalesCloud(tenantId: string): Promise<void> {
+  const existing = await prisma.territory.count({ where: { tenantId } });
+  if (existing > 0) return;
+
+  const admin = await prisma.user.findFirst({
+    where: { tenantId, email: 'admin@acme.com' },
+  });
+  const rep = await prisma.user.findFirst({
+    where: { tenantId, email: 'rep@acme.com' },
+  });
+  if (!admin || !rep) return;
+
+  const india = await prisma.territory.create({
+    data: {
+      tenantId,
+      name: 'India',
+      description: 'Everything in country',
+      managerId: admin.id,
+      rules: { countries: ['India'] },
+    },
+  });
+  const south = await prisma.territory.create({
+    data: {
+      tenantId,
+      name: 'India - South',
+      parentId: india.id,
+      managerId: rep.id,
+      rules: { countries: ['India'], states: ['Karnataka', 'Tamil Nadu'] },
+    },
+  });
+  await prisma.territory.create({
+    data: {
+      tenantId,
+      name: 'India - West',
+      parentId: india.id,
+      rules: { countries: ['India'], states: ['Maharashtra', 'Gujarat'] },
+    },
+  });
+
+  await prisma.territoryMember.create({
+    data: { tenantId, territoryId: south.id, userId: rep.id },
+  });
+
+  // The company seeded above predates territories, so give it an address.
+  await prisma.company.updateMany({
+    where: { tenantId, name: 'Globex India Pvt Ltd' },
+    data: { city: 'Bengaluru', state: 'Karnataka', country: 'India' },
+  });
+
+  const stages = await prisma.dealStage.findMany({
+    where: { tenantId },
+    orderBy: { order: 'asc' },
+  });
+  const stageAt = (probability: number) =>
+    stages.find((s) => s.probability === probability) ?? stages[0];
+
+  const accounts = [
+    {
+      name: 'Initech Systems',
+      domain: 'initech.in',
+      industry: 'Software',
+      employees: 80,
+      city: 'Chennai',
+      state: 'Tamil Nadu',
+    },
+    {
+      name: 'Umbrella Retail',
+      domain: 'umbrella.co.in',
+      industry: 'Retail',
+      employees: 1200,
+      city: 'Mumbai',
+      state: 'Maharashtra',
+    },
+    {
+      name: 'Hooli Labs',
+      domain: 'hooli.in',
+      industry: 'Software',
+      employees: 40,
+      city: 'Pune',
+      state: 'Maharashtra',
+    },
+  ];
+
+  const now = new Date();
+  const inDays = (days: number) =>
+    new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+
+  const pipeline = [
+    { value: '900000', probability: 75, owner: rep.id, expected: inDays(20) },
+    { value: '450000', probability: 50, owner: admin.id, expected: inDays(35) },
+    { value: '260000', probability: 25, owner: rep.id, expected: inDays(50) },
+  ];
+
+  for (let i = 0; i < accounts.length; i += 1) {
+    const company = await prisma.company.create({
+      data: { tenantId, country: 'India', ownerId: rep.id, ...accounts[i] },
+    });
+    const deal = pipeline[i];
+    await prisma.deal.create({
+      data: {
+        tenantId,
+        title: `${accounts[i].name} - CRM rollout`,
+        value: deal.value,
+        currency: 'INR',
+        stageId: stageAt(deal.probability).id,
+        companyId: company.id,
+        ownerId: deal.owner,
+        expectedAt: deal.expected,
+      },
+    });
+  }
+
+  // One already won, so attainment is not flat zero.
+  const wonCompany = await prisma.company.findFirst({
+    where: { tenantId, name: 'Initech Systems' },
+  });
+  await prisma.deal.create({
+    data: {
+      tenantId,
+      title: 'Initech - pilot licences',
+      value: '320000',
+      currency: 'INR',
+      stageId: stageAt(100).id,
+      companyId: wonCompany?.id,
+      ownerId: rep.id,
+      status: 'won',
+      expectedAt: inDays(-10),
+      closedAt: inDays(-10),
+    },
+  });
+
+  const quarterStart = new Date(
+    Date.UTC(now.getUTCFullYear(), Math.floor(now.getUTCMonth() / 3) * 3, 1),
+  );
+  for (const [userId, amount] of [
+    [rep.id, '1500000'],
+    [admin.id, '1000000'],
+  ] as const) {
+    await prisma.quota.create({
+      data: {
+        tenantId,
+        ownerId: userId,
+        period: 'QUARTER',
+        periodStart: quarterStart,
+        amount,
+      },
+    });
+  }
+
+  const badges = [
+    {
+      key: 'first-win',
+      name: 'First win',
+      description: 'Closed a deal',
+      icon: 'trophy',
+      metric: 'DEALS_WON' as const,
+      threshold: '1',
+    },
+    {
+      key: 'quarter-million',
+      name: 'Quarter million',
+      description: 'Closed ₹250,000 of business',
+      icon: 'medal',
+      metric: 'REVENUE_WON' as const,
+      threshold: '250000',
+    },
+    {
+      key: 'on-the-phones',
+      name: 'On the phones',
+      description: 'Logged 25 calls',
+      icon: 'phone',
+      metric: 'CALLS_MADE' as const,
+      threshold: '25',
+    },
+  ];
+  for (const badge of badges) {
+    await prisma.badge.create({ data: { tenantId, ...badge } });
+  }
+
+  await prisma.contest.create({
+    data: {
+      tenantId,
+      name: 'Q push - most revenue closed',
+      metric: 'REVENUE_WON',
+      startsAt: quarterStart,
+      endsAt: new Date(
+        Date.UTC(quarterStart.getUTCFullYear(), quarterStart.getUTCMonth() + 3, 1),
+      ),
+      prize: 'Team dinner',
+    },
+  });
 }
 
 /**

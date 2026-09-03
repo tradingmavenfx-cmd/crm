@@ -27,6 +27,7 @@ import { CpqModule } from './modules/cpq/cpq.module';
 import { TicketsModule } from './modules/tickets/tickets.module';
 import { KbModule } from './modules/kb/kb.module';
 import { PortalModule } from './modules/portal/portal.module';
+import { SalesModule } from './modules/sales/sales.module';
 import { VoiceModule } from './modules/voice/voice.module';
 import { InboxModule } from './modules/inbox/inbox.module';
 import { HealthController } from './modules/health/health.controller';
@@ -69,6 +70,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     TicketsModule,
     KbModule,
     PortalModule,
+    SalesModule,
   ],
   controllers: [HealthController],
   providers: [

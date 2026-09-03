@@ -77,6 +77,13 @@ model Tenant {
   kbSearches         KbSearch[]
   portalLogins       PortalLoginToken[]
   portalSessions     PortalSession[]
+  territories        Territory[]
+  territoryMembers   TerritoryMember[]
+  quotas             Quota[]
+  forecastSnapshots  ForecastSnapshot[]
+  contests           Contest[]
+  badges             Badge[]
+  userBadges         UserBadge[]
 
   @@map("tenants")
 }
@@ -110,27 +117,32 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  tenant                Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  ownedContacts         Contact[]        @relation("ContactOwner")
-  ownedCompanies        Company[]        @relation("CompanyOwner")
-  ownedDeals            Deal[]           @relation("DealOwner")
+  tenant                Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ownedContacts         Contact[]          @relation("ContactOwner")
+  ownedCompanies        Company[]          @relation("CompanyOwner")
+  ownedDeals            Deal[]             @relation("DealOwner")
   activities            Activity[]
-  assignedTasks         Task[]           @relation("TaskAssignee")
-  createdTasks          Task[]           @relation("TaskCreator")
+  assignedTasks         Task[]             @relation("TaskAssignee")
+  createdTasks          Task[]             @relation("TaskCreator")
   auditLogs             AuditLog[]
-  assignedConversations Conversation[]   @relation("ConversationAssignee")
-  handledCalls          Call[]           @relation("CallAgent")
-  createdCampaigns      Campaign[]       @relation("CampaignCreator")
-  mentions              Mention[]        @relation("MentionedUser")
-  assignmentRules       AssignmentRule[] @relation("RuleAssignee")
-  createdWorkflows      Workflow[]       @relation("WorkflowCreator")
-  createdDashboards     Dashboard[]      @relation("DashboardCreator")
-  createdQuotes         Quote[]          @relation("QuoteCreator")
-  approvedQuotes        Quote[]          @relation("QuoteApprover")
-  assignedTickets       Ticket[]         @relation("TicketAssignee")
-  ticketComments        TicketComment[]  @relation("TicketCommentAuthor")
-  ticketRules           TicketRule[]     @relation("TicketRuleAssignee")
-  authoredArticles      Article[]        @relation("ArticleAuthor")
+  assignedConversations Conversation[]     @relation("ConversationAssignee")
+  handledCalls          Call[]             @relation("CallAgent")
+  createdCampaigns      Campaign[]         @relation("CampaignCreator")
+  mentions              Mention[]          @relation("MentionedUser")
+  assignmentRules       AssignmentRule[]   @relation("RuleAssignee")
+  createdWorkflows      Workflow[]         @relation("WorkflowCreator")
+  createdDashboards     Dashboard[]        @relation("DashboardCreator")
+  createdQuotes         Quote[]            @relation("QuoteCreator")
+  approvedQuotes        Quote[]            @relation("QuoteApprover")
+  assignedTickets       Ticket[]           @relation("TicketAssignee")
+  ticketComments        TicketComment[]    @relation("TicketCommentAuthor")
+  ticketRules           TicketRule[]       @relation("TicketRuleAssignee")
+  authoredArticles      Article[]          @relation("ArticleAuthor")
+  managedTerritories    Territory[]        @relation("TerritoryManager")
+  territoryMemberships  TerritoryMember[]
+  quotas                Quota[]            @relation("QuotaOwner")
+  forecastSnapshots     ForecastSnapshot[] @relation("ForecastOwner")
+  badges                UserBadge[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -152,16 +164,27 @@ model Company {
   employees Int?
   annualRev Decimal? @db.Decimal(18, 2)
   ownerId   String?
+
+  /// Where the account sits, for geographic territories
+  city    String?
+  state   String?
+  country String?
+
+  /// Set by the territory rules, or pinned by hand
+  territoryId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  owner    User?     @relation("CompanyOwner", fields: [ownerId], references: [id])
-  contacts Contact[]
-  deals    Deal[]
-  quotes   Quote[]
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owner     User?      @relation("CompanyOwner", fields: [ownerId], references: [id])
+  territory Territory? @relation(fields: [territoryId], references: [id], onDelete: SetNull)
+  contacts  Contact[]
+  deals     Deal[]
+  quotes    Quote[]
 
   @@index([tenantId])
+  @@index([tenantId, territoryId])
   @@map("companies")
 }
 
@@ -214,16 +237,21 @@ model DealStage {
 }
 
 model Deal {
-  id         String    @id @default(uuid())
-  tenantId   String
-  title      String
-  value      Decimal   @default(0) @db.Decimal(18, 2)
-  currency   String    @default("INR")
-  stageId    String
-  companyId  String?
-  contactId  String?
-  ownerId    String?
-  status     String    @default("open") // open | won | lost
+  id        String  @id @default(uuid())
+  tenantId  String
+  title     String
+  value     Decimal @default(0) @db.Decimal(18, 2)
+  currency  String  @default("INR")
+  stageId   String
+  companyId String?
+  contactId String?
+  ownerId   String?
+  status    String  @default("open") // open | won | lost
+
+  /// The rep's own call on the deal. Null means "derive it from the stage",
+  /// so a forecast works before anyone has categorised anything.
+  forecastCategory ForecastCategory?
+
   expectedAt DateTime?
   closedAt   DateTime?
   createdAt  DateTime  @default(now())
@@ -1612,4 +1640,188 @@ model PortalSession {
 
   @@index([tenantId, contactId])
   @@map("portal_sessions")
+}
+
+// ─────────────────────────────────────────────
+// Territories, quotas, forecasting, gamification
+// ─────────────────────────────────────────────
+
+/// A slice of the market, owned by a group of reps. Territories nest, so a
+/// country can contain regions and a region can contain cities.
+model Territory {
+  id          String  @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  parentId    String?
+  managerId   String?
+  isActive    Boolean @default(true)
+
+  /// Matched against a company to assign it automatically. Empty means the
+  /// territory is hand-picked only.
+  rules Json @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent    Territory?         @relation("TerritoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children  Territory[]        @relation("TerritoryTree")
+  manager   User?              @relation("TerritoryManager", fields: [managerId], references: [id], onDelete: SetNull)
+  members   TerritoryMember[]
+  companies Company[]
+  quotas    Quota[]
+  snapshots ForecastSnapshot[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, parentId])
+  @@map("territories")
+}
+
+model TerritoryMember {
+  id          String @id @default(uuid())
+  tenantId    String
+  territoryId String
+  userId      String
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  territory Territory @relation(fields: [territoryId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([territoryId, userId])
+  @@index([tenantId, userId])
+  @@map("territory_members")
+}
+
+enum QuotaPeriod {
+  MONTH
+  QUARTER
+  YEAR
+}
+
+/// What a rep or a territory is expected to close in a period.
+model Quota {
+  id          String      @id @default(uuid())
+  tenantId    String
+  /// Exactly one of these is set: a quota belongs to a person or to a territory
+  ownerId     String?
+  territoryId String?
+  period      QuotaPeriod
+  periodStart DateTime
+  amount      Decimal     @db.Decimal(18, 2)
+  currency    String      @default("INR")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owner     User?      @relation("QuotaOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  territory Territory? @relation(fields: [territoryId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, periodStart])
+  @@map("quotas")
+}
+
+enum ForecastCategory {
+  OMITTED
+  PIPELINE
+  BEST_CASE
+  COMMIT
+  CLOSED
+}
+
+/// What the forecast said on a given day, kept so the call can be scored
+/// against what actually happened.
+model ForecastSnapshot {
+  id          String      @id @default(uuid())
+  tenantId    String
+  ownerId     String?
+  territoryId String?
+  period      QuotaPeriod
+  periodStart DateTime
+  takenAt     DateTime    @default(now())
+
+  closed   Decimal @db.Decimal(18, 2)
+  commit   Decimal @db.Decimal(18, 2)
+  bestCase Decimal @db.Decimal(18, 2)
+  pipeline Decimal @db.Decimal(18, 2)
+  weighted Decimal @db.Decimal(18, 2)
+  quota    Decimal @db.Decimal(18, 2)
+
+  /// Filled in once the period is over, which is what makes accuracy real
+  actual Decimal? @db.Decimal(18, 2)
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owner     User?      @relation("ForecastOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  territory Territory? @relation(fields: [territoryId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, periodStart])
+  @@index([tenantId, ownerId, periodStart])
+  @@map("forecast_snapshots")
+}
+
+enum ContestMetric {
+  REVENUE_WON
+  DEALS_WON
+  CALLS_MADE
+  MEETINGS_HELD
+  TICKETS_RESOLVED
+}
+
+/// A time-boxed competition on one metric.
+model Contest {
+  id       String        @id @default(uuid())
+  tenantId String
+  name     String
+  metric   ContestMetric
+  startsAt DateTime
+  endsAt   DateTime
+  prize    String?
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, startsAt])
+  @@map("contests")
+}
+
+/// Earned once and kept. The standing is recomputed from the records, but an
+/// award is a fact about a moment and is written down.
+model Badge {
+  id          String        @id @default(uuid())
+  tenantId    String
+  key         String
+  name        String
+  description String
+  icon        String        @default("star")
+  metric      ContestMetric
+  /// What it takes to earn it, measured over all time
+  threshold   Decimal       @db.Decimal(18, 2)
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  earned UserBadge[]
+
+  @@unique([tenantId, key])
+  @@map("badges")
+}
+
+model UserBadge {
+  id       String   @id @default(uuid())
+  tenantId String
+  userId   String
+  badgeId  String
+  earnedAt DateTime @default(now())
+  /// The figure that earned it, so the award can be explained later
+  value    Decimal  @db.Decimal(18, 2)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge  Badge  @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+  @@index([tenantId, userId])
+  @@map("user_badges")
 }
