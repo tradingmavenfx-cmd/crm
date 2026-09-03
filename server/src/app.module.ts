@@ -29,6 +29,7 @@ import { KbModule } from './modules/kb/kb.module';
 import { PortalModule } from './modules/portal/portal.module';
 import { SalesModule } from './modules/sales/sales.module';
 import { MarketingModule } from './modules/marketing/marketing.module';
+import { DocumentsModule } from './modules/documents/documents.module';
 import { VoiceModule } from './modules/voice/voice.module';
 import { InboxModule } from './modules/inbox/inbox.module';
 import { HealthController } from './modules/health/health.controller';
@@ -73,6 +74,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     PortalModule,
     SalesModule,
     MarketingModule,
+    DocumentsModule,
   ],
   controllers: [HealthController],
   providers: [

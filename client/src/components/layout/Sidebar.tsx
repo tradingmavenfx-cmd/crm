@@ -17,6 +17,7 @@ const nav = [
   { href: '/territories', label: 'Territories' },
   { href: '/leaderboard', label: 'Leaderboard' },
   { href: '/quotes', label: 'Quotes' },
+  { href: '/documents', label: 'Documents' },
   { href: '/products', label: 'Products' },
   { href: '/tasks', label: 'Tasks' },
   { href: '/tickets', label: 'Tickets' },

@@ -1153,3 +1153,97 @@ export interface PublicPage {
   tenant: { name: string };
   form: { id: string; fields: FormField[]; thankYou: string } | null;
 }
+
+// ── Documents ──────────────────────────────────
+
+export interface DocumentFolder {
+  id: string;
+  name: string;
+  parentId: string | null;
+  _count: { documents: number; children: number };
+}
+
+export interface CrmDocument {
+  id: string;
+  name: string;
+  tags: string[];
+  mimeType: string;
+  size: number;
+  version: number;
+  expiresAt: string | null;
+  updatedAt: string;
+  folder: { id: string; name: string } | null;
+  owner: { id: string; firstName: string; lastName: string } | null;
+  contact: { id: string; firstName: string; lastName: string } | null;
+  company: { id: string; name: string } | null;
+  deal: { id: string; title: string } | null;
+  _count?: { versions: number; shares: number };
+}
+
+export interface DocumentShare {
+  id: string;
+  token: string;
+  version: number;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  requireSignature: boolean;
+  views: number;
+  downloads: number;
+  lastSeenAt: string | null;
+  signedName: string | null;
+  signedAt: string | null;
+  createdAt: string;
+}
+
+export interface DocumentDetail extends CrmDocument {
+  versions: {
+    id: string;
+    version: number;
+    size: number;
+    note: string | null;
+    createdAt: string;
+    author: { firstName: string; lastName: string } | null;
+  }[];
+  shares: DocumentShare[];
+}
+
+export interface DocumentActivity {
+  views: number;
+  downloads: number;
+  averageSeconds: number | null;
+  events: {
+    id: string;
+    type: string;
+    ipAddress: string | null;
+    seconds: number | null;
+    createdAt: string;
+  }[];
+}
+
+export interface DocumentTemplate {
+  id: string;
+  name: string;
+  kind: string;
+  body: string;
+}
+
+export interface ExpiringDocument {
+  id: string;
+  name: string;
+  expiresAt: string;
+  company: string | null;
+  owner: string | null;
+  daysLeft: number;
+}
+
+/** What the public share link returns */
+export interface SharedDocument {
+  name: string;
+  mimeType: string;
+  size: number;
+  sharedBy: string;
+  requireSignature: boolean;
+  signed: boolean;
+  signedName: string | null;
+  expiresAt: string | null;
+}
