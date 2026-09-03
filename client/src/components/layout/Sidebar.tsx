@@ -31,6 +31,7 @@ const nav = [
   { href: '/ivr-flows', label: 'IVR Flows' },
   { href: '/email-templates', label: 'Email Templates' },
   { href: '/sms-templates', label: 'SMS Templates' },
+  { href: '/security', label: 'Security' },
 ];
 
 export function Sidebar() {

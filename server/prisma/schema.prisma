@@ -90,6 +90,9 @@ model Tenant {
   marketingForms     MarketingForm[]
   formSubmissions    FormSubmission[]
   documents          Document[]
+  sessions           UserSession[]
+  loginAttempts      LoginAttempt[]
+  security           TenantSecurity?
   documentFolders    DocumentFolder[]
   documentVersions   DocumentVersion[]
   documentShares     DocumentShare[]
@@ -124,6 +127,8 @@ model User {
   role         Role      @default(SALES_REP)
   isActive     Boolean   @default(true)
   lastLoginAt  DateTime?
+  /// Superseded by UserSession, which allows more than one device at a time.
+  /// Kept so an existing token keeps working until it expires.
   refreshToken String? // hashed refresh token
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -154,6 +159,7 @@ model User {
   quotas                Quota[]            @relation("QuotaOwner")
   ownedLeads            Lead[]             @relation("LeadOwner")
   ownedDocuments        Document[]         @relation("DocumentOwner")
+  sessions              UserSession[]
   documentVersions      DocumentVersion[]  @relation("DocumentVersionAuthor")
   documentShares        DocumentShare[]    @relation("DocumentShareCreator")
   assignedForms         MarketingForm[]    @relation("FormAssignee")
@@ -2208,4 +2214,90 @@ model DocumentTemplate {
 
   @@unique([tenantId, name])
   @@map("document_templates")
+}
+
+// -----------------------------------------------------------
+// Security: sessions, sign-in history and tenant policy
+// -----------------------------------------------------------
+
+/// One signed-in device. Replaces the single refresh token that used to sit on
+/// the user, which meant signing in anywhere silently signed you out
+/// everywhere else.
+model UserSession {
+  id       String @id @default(uuid())
+  tenantId String
+  userId   String
+
+  /// SHA-256 of the refresh token; the token itself is never stored
+  tokenHash String @unique
+
+  ipAddress String?
+  userAgent String?
+  /// A readable label worked out from the user agent, e.g. "Chrome on Windows"
+  device    String?
+
+  createdAt     DateTime  @default(now())
+  lastSeenAt    DateTime  @default(now())
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  /// signed_out | replaced | revoked_by_user | password_changed | expired
+  revokedReason String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId])
+  @@index([userId, revokedAt])
+  @@map("user_sessions")
+}
+
+/// Every attempt to sign in, successful or not. The failures are what make
+/// lockout and "was that you?" possible.
+model LoginAttempt {
+  id       String  @id @default(uuid())
+  tenantId String?
+  email    String
+  success  Boolean
+
+  /// unknown_user | bad_password | inactive | locked_out | ip_not_allowed
+  reason    String?
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([email, createdAt])
+  @@index([ipAddress, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("login_attempts")
+}
+
+/// Per-tenant security policy. Absent means the defaults below apply.
+model TenantSecurity {
+  id       String @id @default(uuid())
+  tenantId String @unique
+
+  /// Exact IPs or CIDR blocks allowed to sign in. Empty means anywhere.
+  ipAllowlist String[] @default([])
+
+  /// Failures before an account is locked, and for how long
+  maxFailedAttempts Int @default(5)
+  lockoutMinutes    Int @default(15)
+
+  /// How long a signed-in device stays signed in
+  sessionDays Int @default(7)
+
+  /// Sign-in history and audit entries older than this are purged. Null keeps
+  /// them for good.
+  loginRetentionDays Int?
+  auditRetentionDays Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_security")
 }

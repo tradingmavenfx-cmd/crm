@@ -25,9 +25,10 @@ Social posting, social inbox and social listening are **not** built: each
 network needs its own OAuth app and review, which is an integration project
 rather than a feature.
 
-**Phase 5 — Platform** has started: document management (5.1) is built. The
-integration marketplace and developer platform (5.2), enterprise administration
-and white labelling (5.3) and the security and compliance work (5.4) are not.
+**Phase 5 — Platform** is in progress: document management (5.1) and the
+security and compliance work (5.4) are built. The integration marketplace and
+developer platform (5.2) and enterprise administration and white labelling
+(5.3) are not.
 
 - [x] Monorepo scaffolding
 - [x] NestJS backend foundation (config, Prisma, global guards, Swagger)
@@ -454,7 +455,92 @@ sit on a dashboard next to pipeline and campaign figures.
       e-signature provider
 - [ ] 5.2 Integration marketplace & developer platform
 - [ ] 5.3 Enterprise administration & white labelling
-- [ ] 5.4 Security & compliance
+- [x] 5.4 Security — multi-device sessions with rotation, sign-in history,
+      brute-force lockout, per-tenant IP allowlist, audit trail with field
+      changes, retention policies
+- [x] 5.4 Compliance — full workspace export, subject access export, right to
+      erasure
+- [ ] 5.4 rest — certifications (SOC 2, ISO 27001, HIPAA), WAF, penetration
+      testing, data residency, backups and disaster recovery: operational and
+      infrastructure work rather than application code
+
+### Security
+
+**One device is no longer one account.** A refresh token used to be a single
+hashed column on the user, so signing in on a phone silently signed the laptop
+out. Each device now has its own session row, listed with the browser, the
+platform, the address and when it was last used, and any one of them can be
+signed out on its own. A session can only be revoked by the person it belongs
+to — the query is scoped by user as well as tenant, so one person cannot sign
+another out by guessing an id.
+
+**Refresh tokens rotate.** Refreshing swaps the token the session answers to,
+so the old one stops working immediately: a stolen refresh token is good for a
+single use at most, and the theft shows up as the real user being signed out.
+Tokens are stored as SHA-256 hashes, never in the clear.
+
+Driving this turned up a real defect: two sign-ins in the same second produced
+**byte-identical JWTs** — same payload, same `iat` — and the second collided
+with the first on the session's unique token hash. Every token now carries its
+own `jti`.
+
+**Brute force is counted since the last success**, so signing in correctly
+clears the slate rather than leaving yesterday's typos to lock somebody out
+today. The lockout is checked before the password, so a locked account cannot
+be used to test passwords at all, and the address is lowercased so casing
+cannot dodge it.
+
+**The IP allowlist is checked before the password too**, for the same reason.
+It takes exact addresses or CIDR blocks; an IPv6 entry is compared exactly
+rather than pretended to be understood, because a half-implemented IPv6 mask
+would let addresses through that look blocked. A malformed rule matches
+nothing rather than everything.
+
+**Every sign-in and every failure is recorded** with the reason — wrong
+password, no such account, locked out, blocked network — while the caller is
+told only "invalid credentials". The history knows which it was; the person at
+the keyboard does not.
+
+**The audit trail records what changed, field by field**, and never records a
+secret: password hashes, refresh tokens and share tokens are dropped whatever
+the caller passes, because a table built to be read by admins must not become
+the place the credentials live. Writing an entry never throws — an audit
+failure must not be able to roll back the thing it was recording.
+
+### Compliance
+
+`GET /api/security/export` returns everything the workspace holds as one JSON
+document, **without password hashes, refresh tokens, quote and CSAT tokens or
+storage keys**: an export is handed to whoever asked for it, and credentials
+have no business travelling with it. Taking one is itself audited, with who
+took it.
+
+`GET /api/security/export/person` answers a subject access request, and
+`POST /api/security/erase` honours a right-to-erasure request. **Erasure
+overwrites rather than deletes.** A contact is attached to deals, invoices and
+tickets a business is required to keep, and deleting the row would take those
+with it — so what identifies the person goes, the commercial record stays, and
+their portal sessions are ended. The trail that proves the request was honoured
+**does not contain the address**, or it would be the one place it survived.
+
+Retention only deletes where a tenant has actually chosen a period: silently
+discarding an audit trail because nobody picked a number would be worse than
+keeping it.
+
+**Not built, and why:** SOC 2, ISO 27001 and HIPAA are certifications and
+process, not code. A WAF, penetration testing, data residency, automated
+backups, point-in-time recovery and disaster recovery are operational and
+infrastructure work. Field-level encryption of email and phone is not applied:
+those columns are searched case-insensitively throughout the product, and
+encrypting them would break lookup — at-rest encryption for them belongs to the
+database and its volume.
+
+**Still a known gap:** tenant isolation is enforced in application code — every
+query is scoped by `tenantId` — and not by Postgres row-level security. A query
+that forgot the scope would not be stopped by the database. Closing that
+properly needs per-request session variables and a non-owner database role, and
+re-verifying every module against it; it is deliberately its own piece of work
+rather than half-done here.
 
 ### Documents
 
