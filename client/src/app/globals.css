@@ -5,6 +5,13 @@
 :root {
   --background: #f8fafc;
   --foreground: #0f172a;
+
+  /* The default brand colour, as space-separated RGB. A workspace that has
+     chosen its own overwrites these at runtime. */
+  --brand-50: 238 242 255;
+  --brand-500: 99 102 241;
+  --brand-600: 79 70 229;
+  --brand-700: 67 56 202;
 }
 
 body {

@@ -25,11 +25,10 @@ Social posting, social inbox and social listening are **not** built: each
 network needs its own OAuth app and review, which is an integration project
 rather than a feature.
 
-**Phase 5 — Platform** is in progress: document management (5.1), the developer
-platform (5.2 — API keys and webhooks) and the security and compliance work
-(5.4) are built. Enterprise administration and white labelling (5.3) is not,
-and neither are the native integrations, which need a reviewed OAuth app per
-vendor.
+**Phase 5 — Platform** is complete apart from the native integrations, which
+need a reviewed OAuth app per vendor: document management (5.1), the developer
+platform (5.2), enterprise administration and white labelling (5.3) and the
+security and compliance work (5.4) are all built.
 
 - [x] Monorepo scaffolding
 - [x] NestJS backend foundation (config, Prisma, global guards, Swagger)
@@ -458,7 +457,14 @@ sit on a dashboard next to pipeline and campaign figures.
       outbound webhooks with retries and replay, OpenAPI reference
 - [ ] 5.2 rest — native integrations, GraphQL, published SDKs, a low-code app
       builder and a paid marketplace
-- [ ] 5.3 Enterprise administration & white labelling
+- [x] 5.3 White labelling — product name, logo, brand colour applied
+      throughout including the sign-in page, custom domain, "powered by" toggle
+- [x] 5.3 Enterprise administration — per-workspace settings, platform-wide
+      usage and health, suspend and restore
+- [x] 5.3 India — rupees and Asia/Kolkata by default, GSTIN, UPI payment
+      requests on invoices
+- [ ] 5.3 rest — a branded mobile app, custom email domain, Aadhaar
+      verification and collected UPI payments
 - [x] 5.4 Security — multi-device sessions with rotation, sign-in history,
       brute-force lockout, per-tenant IP allowlist, audit trail with field
       changes, retention policies
@@ -469,6 +475,55 @@ sit on a dashboard next to pipeline and campaign figures.
 - [ ] 5.4 rest — certifications (SOC 2, ISO 27001, HIPAA), WAF, penetration
       testing, data residency, backups and disaster recovery: operational and
       infrastructure work rather than application code
+
+### White labelling and workspace settings
+
+**The brand colour is a real colour, not a stored setting nobody reads.** The
+interface's four brand shades are CSS variables, and a workspace's own colour
+is painted onto the document at runtime — so `bg-brand-600` genuinely becomes
+that workspace's colour everywhere, including on the pages customers see.
+
+Only one colour is asked for. The tint and the two shades either side are
+derived from it, because asking a customer for four related colours is asking
+them to do design, and one colour is what they mean by "our brand colour". A
+colour that cannot be read falls back to the default rather than putting `NaN`
+into a stylesheet.
+
+**The sign-in page is branded before anybody has signed in**, which is the
+whole point: `GET /api/branding` answers by workspace slug or by custom
+hostname, and carries only what has to be on screen — the name, the logo, the
+colour and the headline. No support email, no GSTIN, no payment details. A
+custom domain is unique across the platform, checked when it is set rather than
+discovered at request time.
+
+### Running the platform
+
+`GET /api/platform/tenants` is the one report meant to cross workspaces, and is
+reachable only by a `SUPER_ADMIN`. It reports what each workspace is doing —
+people, contacts, open deals, revenue closed, messages, storage, API calls —
+and reads **signals** off those numbers rather than a score: "nobody has signed
+in since 12 August", "10 people have accounts but only 1 used it this month",
+"2 webhooks failing". A number out of a hundred is not something an operator
+can act on; those sentences are.
+
+Suspending a workspace stops anybody signing in and **deletes nothing**.
+
+### India
+
+Rupees and `Asia/Kolkata` are the defaults. A workspace stores its GSTIN for
+invoices, and a UPI id it wants to be paid at.
+
+With that set, an invoice produces a **UPI payment request** built to the
+deep-link spec — `upi://pay?pa=…&am=…&cu=INR&tn=Invoice INV-2026-0001` — which
+any Indian banking app opens, with no payment provider in the middle and
+nothing to integrate. It asks for the money; it does **not** know whether the
+money arrived, and does not pretend to. Reconciliation needs a provider.
+
+**Not built:** Aadhaar verification, which needs licensed UIDAI access as a KUA
+or AUA and carries storage obligations that are a legal question rather than a
+coding one; collected UPI payments, which need a PSP; a custom email domain,
+which needs DKIM and SPF set up per customer; and a branded mobile app, which
+is a separate product.
 
 ### Developer platform
 

@@ -6,6 +6,7 @@ import { tokenStore } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Topbar } from '@/components/layout/Topbar';
+import { BrandingProvider } from '@/components/Branding';
 
 export default function DashboardLayout({
   children,
@@ -14,6 +15,7 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const hydrate = useAuthStore((s) => s.hydrate);
+  const tenantSlug = useAuthStore((s) => s.tenantSlug);
 
   // Redirect happens as a side effect; we NEVER block the shell behind a
   // spinner wall. The layout renders instantly so navigation feels < 1s.
@@ -29,6 +31,7 @@ export default function DashboardLayout({
 
   return (
     <div className="flex">
+      <BrandingProvider slug={tenantSlug} />
       <Sidebar />
       <div className="flex-1 min-h-screen flex flex-col">
         <Topbar />
