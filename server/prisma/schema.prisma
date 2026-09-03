@@ -9,7 +9,10 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  /// The application connects as a role that cannot bypass row-level security
+  url       = env("DATABASE_URL")
+  /// Migrations connect as the owner, which can change the schema
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 // ─────────────────────────────────────────────

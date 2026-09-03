@@ -35,7 +35,11 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4000
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/crm?schema=public
+      # The app role cannot bypass row-level security; the owner runs
+      # migrations. Create the role with: npm run db:setup-role
+      DATABASE_URL: postgresql://crm_app:crm_app_dev_password@postgres:5432/crm?schema=public
+      DIRECT_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/crm?schema=public
+      APP_DB_PASSWORD: crm_app_dev_password
       JWT_ACCESS_SECRET: change-me-access-secret
       JWT_ACCESS_EXPIRES_IN: 15m
       JWT_REFRESH_SECRET: change-me-refresh-secret
